@@ -1,98 +1,112 @@
+# generic pluggy loader
 from importlib import import_module
-import logging
-import pkgutil
-from traceback import print_exc
-from types import ModuleType
-import typing as ty
+import os
+from pkgutil import iter_modules
+import types
+import typing as t
 
-T = ty.TypeVar('T')
+import pluggy  # type: ignore
+
+
+PKG_ROOT = os.path.dirname(os.path.abspath(__file__))
+PKG_NAME = os.path.basename(PKG_ROOT)
+_PMS = None  # type: ignore
+
+
+class PluginSpec:
+    ...
+
+
+class PluginImpl:
+    ...
 
 
 class PluginException(Exception):
-    pass
+    ...
 
 
-class Plugin:
+def hookimpl(entity: str, **kwargs) -> pluggy.HookimplMarker:
+    return pluggy.HookimplMarker(f'{PKG_NAME}.{entity}', **kwargs)
 
-    def __init__(
-        self, prefix: str,
-        _cls: ty.Protocol,
-        ns_pkg: ModuleType = None,
-        validate: bool = True,
-        print_ex: bool = True
-    ) -> None:
-        self._ns_pkg = ns_pkg
-        self._prefix = prefix
-        self._cls = _cls
-        # how to get actual class name of Protocol class without hack?
-        self._cls_name = str(_cls).split('.')[-1][0:-2]
-        self.validate = validate
-        self.print_ex = print_ex
-        self.load()
 
-    def _cls_funcs(self, _cls: T):
-        allowed = ['__init__']
-        return set([
-            _ for _ in dir(_cls)
-            if (_ in allowed or not _.startswith('_'))
-            and callable(getattr(_cls, _))
-        ])
+class PM(pluggy.PluginManager):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def _load_plugin(self, name) -> None:
-        _name = name.split('.')[-1].replace('nosql_', '')
-        try:
-            module = import_module(name)
-            if not hasattr(module, self._cls_name):
-                return
-            _cls = getattr(module, self._cls_name)
 
-            # faster than typing.runtime_checkable and signature
-            # not checked anyway, too much faff to add ABCs as well
-            if self.validate:
-                actual = self._cls_funcs(_cls)
-                expected = self._cls_funcs(self._cls)
-                missing = expected.difference(actual)
-                if len(missing):
-                    logging.warning(f'plugin {name} missing funcs {missing}')
-                    return
-            self._plugins[_name] = {}
-            if (
-                hasattr(module, 'MISSING_DEPS')
-                and getattr(module, 'MISSING_DEPS') is True
-            ):
-                raise PluginException('missing dependencies')
-            self._plugins[_name] = {'cls': _cls}
-        except Exception as e:
-            if self.print_ex:
-                print_exc()
-            self._plugins[_name] = {'ex': str(e)}
+def clear_pms():
+    global _PMS
+    _PMS = {}
 
-    def load(self) -> None:
-        self._plugins = {}
-        # load from nosql
-        if isinstance(self._ns_pkg, ModuleType):
-            for _, name, _ in pkgutil.iter_modules(
-                self._ns_pkg.__path__, self._ns_pkg.__name__ + '.'
-            ):
-                self._load_plugin(name)
-        # load 3rd party plugins from PYTHONPATH matching nosql_*
-        for _, name, _ in pkgutil.iter_modules():
-            if name.startswith(self._prefix):
-                self._load_plugin(name)
 
-    def get(self, name: ty.Optional[str]) -> T:
-        available = ', '.join(self.loaded())
-        pd = self._plugins.get(name)
-        if pd is None:
+def get_pm(
+    entity: str,
+    prefix: t.Optional[str] = None,
+    nocache: t.Optional[bool] = False
+) -> PM:
+    """Generic pluggy loader for loading specs, hooks and plugins
+
+    plugins/hooks etc loaded into {mypkg}.{entity} namespace
+    default prefix = entity.title()
+
+    Example structure:
+
+    mypkg
+    ├─ foo.py            # contains FooSpecs, FooHooks, FooBase abc
+    ├- bar.py            # contains BarSpecs, BarHooks, BarBase abc
+    ├─ plugin.py         # this file
+    └─ plugins
+       └─ foo            # entity 'foo'
+          └- plugin1.py  # contains Foo(FooBase)
+          └- plugin2.py
+       └─ bar            # entity 'bar'
+          └- plugin1.py  # contains Bar(BarBase)
+          └- plugin2.py
+
+    Example usage:
+
+    from mypkg.plugin import get_pm
+    foo_pm = get_pm('foo')         # namespace mypkg.foo
+    foo_pm.list_name_plugin()      # .. plugin1, plugin2
+
+    bar_pm = get_pm('bar', 'Bar')  # namespace mypkg.bar
+
+    """
+    if prefix is None:
+        prefix = entity.title()
+
+    # global... cache... yikes...  yuk!
+    if not nocache:
+        global _PMS
+        if _PMS is None:
+            _PMS = {}
+        if entity in _PMS:
+            return _PMS[entity]
+
+    pm = pluggy.PluginManager(f'{PKG_NAME}.{entity}')
+    entity_module = import_module(f'{PKG_NAME}.{entity}')
+
+    spec_module = getattr(entity_module, f'{prefix}Specs', None)
+    if spec_module and issubclass(spec_module, PluginSpec):  # type: ignore
+        pm.add_hookspecs(spec_module)
+
+    hook_module = getattr(entity_module, f'{prefix}Hooks', None)
+    if hook_module and issubclass(hook_module, PluginImpl):  # type: ignore
+        hook_module = t.cast(types.FunctionType, hook_module)
+        pm.register(hook_module())
+
+    for info in iter_modules([os.path.join(PKG_ROOT, 'plugins', entity)]):
+        path = f'{PKG_NAME}.plugins.{entity}.{info.name}'
+        module = import_module(path)
+        if hasattr(module, 'MISSING_DEPS'):
             raise PluginException(
-                f'plugin {name} not found, available: {available}'
+                f'plugin {path} missing required dependencies'
             )
-        ex = pd.get('ex')
-        if ex:
-            raise PluginException(f'plugin {name} exception: {ex}')
-        return pd['cls']
+        pm.register(plugin=module, name=info.name)
 
-    def loaded(self) -> ty.List[str]:
-        return [
-            name for name in self._plugins
-        ]
+    pm.load_setuptools_entrypoints(f'{PKG_NAME}.{entity}')
+    pm.check_pending()
+
+    if not nocache:
+        _PMS[entity] = pm  # type: ignore
+    return pm

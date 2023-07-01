@@ -1,9 +1,11 @@
 import os
+import typing as t
 
-import boto3
-from moto import mock_dynamodb2
+import boto3  # type: ignore
+from moto import mock_dynamodb2  # type: ignore
+import pluggy  # type: ignore
 
-
+from nosql import plugin
 from nosql import table
 
 
@@ -73,6 +75,31 @@ def test_get_item():
     create_table('hash_only', ['1', '2'])
     tb = table('hash_only')
     assert tb.get_item(hk='1') == _item('1')
+    # assert False
+
+
+@mock_dynamodb2
+def test_get_item_hook():
+    os.environ['NOSQL_DB'] = 'dynamodb'
+    create_table('hash_range', ['1', '2'], ['a', 'b'])
+    tb = table('hash_range')
+
+    hookimpl = pluggy.HookimplMarker('nosql.table')
+    assert tb.get_item(hk='1', rk='a') == _item('1', 'a')
+
+    class TableHooks:
+
+        @hookimpl
+        def get_item_post(self, table: str, item: t.Dict) -> t.Dict:
+            print(f'{table}.get_item_post({item})')
+            return {'foo': 'bar'}
+
+    pm = plugin.get_pm('table')
+    pm.register(TableHooks())
+
+    assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
+    pm.unregister(pm.get_plugin('dynamodb'))
+    plugin.clear_pms()
 
 
 @mock_dynamodb2
@@ -80,6 +107,7 @@ def test_put_item():
     os.environ['NOSQL_DB'] = 'dynamodb'
     create_table('hash_range')
     tb = table('hash_range')
+    assert tb.get_item(hk='1', rk='a') is None
     assert tb.put_item(_item('1', 'a')) is True
     assert tb.get_item(hk='1', rk='a') == _item('1', 'a')
 
