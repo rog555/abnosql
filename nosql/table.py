@@ -5,6 +5,7 @@ import typing as t
 
 import pluggy  # type: ignore
 
+import nosql.exceptions as ex
 from nosql import plugin
 
 hookimpl = pluggy.HookimplMarker('nosql.table')
@@ -46,15 +47,15 @@ class TableBase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def put_item(self, item: t.Dict) -> bool:
+    def put_item(self, item: t.Dict):
         pass
 
     @abstractmethod
-    def put_items(self, items: t.Iterable[t.Dict]) -> bool:
+    def put_items(self, items: t.Iterable[t.Dict]):
         pass
 
     @abstractmethod
-    def delete_item(self, **kwargs) -> bool:
+    def delete_item(self, **kwargs):
         pass
 
     @abstractmethod
@@ -72,5 +73,5 @@ def table(
     pm = plugin.get_pm('table')
     module = pm.get_plugin(database)
     if module is None:
-        raise plugin.PluginException(f'table.{database} plugin not found')
+        raise ex.PluginException(f'table.{database} plugin not found')
     return module.Table(pm, name, config)

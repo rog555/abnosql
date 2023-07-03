@@ -7,6 +7,8 @@ import typing as t
 
 import pluggy  # type: ignore
 
+from nosql.exceptions import PluginException
+
 
 PKG_ROOT = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = os.path.basename(PKG_ROOT)
@@ -21,8 +23,8 @@ class PluginImpl:
     ...
 
 
-class PluginException(Exception):
-    ...
+# class PluginException(Exception):
+#     ...
 
 
 def hookimpl(entity: str, **kwargs) -> pluggy.HookimplMarker:

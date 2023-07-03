@@ -1,10 +1,14 @@
 from datetime import datetime
+import functools
 import json
+from traceback import print_exc
 import typing as t
 
 from boto3.dynamodb.types import Binary  # type: ignore
 from boto3.dynamodb.types import Decimal  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
+import nosql.exceptions as ex
 from nosql.plugin import PM
 from nosql.table import TableBase
 import pluggy  # type: ignore
@@ -48,6 +52,24 @@ def get_key(**kwargs):
     return key
 
 
+def dynamodb_ex_handler(raise_not_found: t.Optional[bool] = True):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except ClientError as e:
+                code = e.response['Error']['Code']
+                if raise_not_found and code in ['ResourceNotFoundException']:
+                    raise ex.NotFoundException(e)
+                raise ex.ValidationException(e)
+            except Exception as e:
+                print_exc()
+                raise ex.PluginException(e)
+        return wrapper
+    return decorator
+
+
 class Table(TableBase):
 
     def __init__(
@@ -63,6 +85,7 @@ class Table(TableBase):
             config = t.cast(t.Dict, _config)
         self.config = config
 
+    @dynamodb_ex_handler()
     def get_item(self, **kwargs) -> t.Dict:
         response = deserialize(self.table.get_item(
             TableName=self.name,
@@ -74,23 +97,23 @@ class Table(TableBase):
             item = _item
         return item
 
-    def put_item(self, item: t.Dict) -> bool:
+    @dynamodb_ex_handler()
+    def put_item(self, item: t.Dict):
         self.table.put_item(Item=item)
         self.pm.hook.put_item_post(table=self.name, item=item)
-        return True
 
-    def put_items(self, items: t.Iterable[t.Dict]) -> bool:
+    @dynamodb_ex_handler()
+    def put_items(self, items: t.Iterable[t.Dict]):
         # TODO(batch)
         for item in items:
             self.put_item(item)
         self.pm.hook.put_items_post(table=self.name, items=items)
-        return True
 
-    def delete_item(self, **kwargs) -> bool:
+    @dynamodb_ex_handler()
+    def delete_item(self, **kwargs):
         key = get_key(**kwargs)
         self.table.delete_item(Key=key)
         self.pm.hook.delete_item_post(table=self.name, key=key)
-        return True
 
     def query(self, query: str) -> t.Iterable[t.Dict]:
         print(f'dynamodb.query({query})')
