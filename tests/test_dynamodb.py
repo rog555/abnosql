@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import typing as t
 
 from moto import mock_dynamodb2  # type: ignore
@@ -8,6 +9,8 @@ from nosql import plugin
 from nosql import table
 
 from tests import common as cmn
+from tests.mock_boto3 import mock_boto3
+from tests.mock_boto3 import set_db
 
 
 @mock_dynamodb2
@@ -76,3 +79,23 @@ def test_delete_item():
     assert tb.get_item(hk='1', rk='a') == cmn.item('1', 'a')
     tb.delete_item(hk='1', rk='a')
     assert tb.get_item(hk='1', rk='a') is None
+
+
+@mock_boto3
+def test_query():
+    os.environ['NOSQL_DB'] = 'dynamodb'
+
+    db = sqlite3.connect(':memory:')
+    with db:
+        set_db(db)
+        cmn.create_table('hash_range', ['1', '2'], ['a', 'b'], db)
+
+        tb = table('hash_range')
+        response = tb.query(
+            'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
+            {'@hk': '1', '@num': 4}
+        )
+        assert response == {
+            'items': cmn.items(['1'], ['a', 'b']),
+            'next': None
+        }

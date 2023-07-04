@@ -3,10 +3,12 @@ import os
 from traceback import print_exc
 import typing as t
 
+import pluggy  # type: ignore
+
 import nosql.exceptions as ex
 from nosql.plugin import PM
 from nosql.table import TableBase
-import pluggy  # type: ignore
+from nosql.table import validate_statement
 
 hookimpl = pluggy.HookimplMarker('nosql.table')
 
@@ -124,6 +126,40 @@ class Table(TableBase):
         )
         self.pm.hook.delete_item_post(table=self.name, key=dict(kwargs))
 
-    def query(self, query: str) -> t.Iterable[t.Dict]:
-        print(f'cosmos.query({query})')
-        return [{}]
+    @cosmos_ex_handler()
+    def query(
+        self,
+        statement: str,
+        parameters: t.Optional[t.Dict[str, t.Any]] = None,
+        limit: t.Optional[int] = None,
+        next: t.Optional[str] = None
+    ) -> t.Dict[str, t.Any]:
+        print(f'cosmos.query({statement})')
+        validate_statement(statement)
+        kwargs: t.Dict[str, t.Any] = {
+            'query': statement,
+            'enable_cross_partition_query': True
+        }
+        if parameters:
+            kwargs['parameters'] = [
+                {'name': k, 'value': v}
+                for k, v in parameters.items()
+            ]
+        if limit:
+            kwargs['max_item_count'] = limit
+        # from microsoft / planetary-computer-tasks on github
+        # The Python SDK does not support continuation tokens
+        # for cross-partition queries.
+        # if next:
+        #     kwargs['initial_headers'] = {
+        #         'x-ms-continuation': next
+        #     }
+        container = self._container(self.name)
+        items = list(container.query_items(**kwargs))
+        for i in range(len(items)):
+            items[i] = strip_cosmos_attrs(items[i])
+
+        return {
+            'items': items,
+            'next': None
+        }

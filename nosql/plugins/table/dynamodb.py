@@ -7,11 +7,13 @@ import typing as t
 from boto3.dynamodb.types import Binary  # type: ignore
 from boto3.dynamodb.types import Decimal  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
+import pluggy  # type: ignore
 
 import nosql.exceptions as ex
 from nosql.plugin import PM
+from nosql.table import get_params
 from nosql.table import TableBase
-import pluggy  # type: ignore
+from nosql.table import validate_statement
 
 hookimpl = pluggy.HookimplMarker('nosql.table')
 
@@ -77,12 +79,13 @@ class Table(TableBase):
     ) -> None:
         self.pm = pm
         self.name = name
-        self.table = boto3.resource('dynamodb').Table(name)
         if config is None:
             config = {}
         _config = self.pm.hook.config()
         if _config:
             config = t.cast(t.Dict, _config)
+        self.session = config.get('session', boto3.session.Session())
+        self.table = self.session.resource('dynamodb').Table(name)
         self.config = config
 
     @dynamodb_ex_handler()
@@ -115,6 +118,49 @@ class Table(TableBase):
         self.table.delete_item(Key=key)
         self.pm.hook.delete_item_post(table=self.name, key=key)
 
-    def query(self, query: str) -> t.Iterable[t.Dict]:
-        print(f'dynamodb.query({query})')
-        return [{}]
+    @dynamodb_ex_handler()
+    def query(
+        self,
+        statement: str,
+        parameters: t.Optional[t.Dict[str, t.Any]] = None,
+        limit: t.Optional[int] = None,
+        next: t.Optional[str] = None
+    ) -> t.Dict[str, t.Any]:
+        print(f'dynamodb.query({statement})')
+        validate_statement(statement)
+        if parameters is None:
+            parameters = {}
+
+        def _get_param(var, val):
+            key = (
+                'N' if isinstance(val, float) or isinstance(val, int)
+                else 'NULL' if val is None
+                else 'BOOL' if isinstance(val, bool)
+                else 'S'
+            )
+            return {key: val}
+
+        (statement, params) = get_params(
+            statement, parameters, _get_param, '?'
+        )
+
+        client = self.session.client('dynamodb')
+        kwargs: t.Dict[str, t.Any] = {
+            'Statement': statement
+        }
+        if next is not None:
+            kwargs['NextToken'] = next
+        if limit is not None:
+            kwargs['Limit'] = limit
+        if len(params):
+            kwargs['Parameters'] = params
+
+        print(f'dynamodb.execute_statement({kwargs})')
+        response = client.execute_statement(**kwargs)
+        items = deserialize(response.get('Items', []))
+
+        print(json.dumps(response, indent=2))
+        return {
+            'items': items,
+            'next': response.get('NextToken')
+        }
