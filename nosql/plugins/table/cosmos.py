@@ -150,6 +150,10 @@ class Table(TableBase):
         # from microsoft / planetary-computer-tasks on github
         # The Python SDK does not support continuation tokens
         # for cross-partition queries.
+        #
+        # response_hook callable doesnt show x-ms-continuation
+        # header with or without enable_cross_partition_query
+        # even when max_item_count = 1
         # if next:
         #     kwargs['initial_headers'] = {
         #         'x-ms-continuation': next

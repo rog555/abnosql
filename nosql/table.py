@@ -100,22 +100,26 @@ def get_params(
     replace: t.Optional[str] = None
 ) -> t.Tuple[str, t.List]:
     # convert @variable to dynamodb ? placeholders
-    vars = list(set(re.findall(r'\@[a-zA-Z0-9_.-]+', statement)))
+    vars = list(re.findall(r'\@[a-zA-Z0-9_.-]+', statement))
     params = []
     _missing = {}
     for var in vars:
-        if isinstance(replace, str):
-            statement = statement.replace(var, replace)
         if var not in parameters:
             _missing[var] = True
         else:
             val = parameters[var]
             params.append(param_val(var, val))
+    for var in parameters.keys():
+        if var not in vars:
+            _missing[var] = True
     missing = sorted(_missing.keys())
     if len(missing):
         raise ex.ValidationException(
             'missing parameters: ' + ', '.join(missing)
         )
+    if isinstance(replace, str):
+        for var in parameters.keys():
+            statement = statement.replace(var, replace)
     return (statement, params)
 
 

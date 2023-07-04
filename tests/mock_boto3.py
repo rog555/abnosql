@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import botocore  # type: ignore
 
-from tests.common import db_query
+from tests.common import sqlite3_query
 
 ORIG_MAKE_API_CALL = botocore.client.BaseClient._make_api_call
 THISMODULE = sys.modules[__name__]
@@ -17,11 +17,6 @@ MOCK_OPERATIONS = {
         'ExecuteStatement'
     ]
 }
-
-
-def set_db(db):
-    global DB
-    DB = db
 
 
 def mock_boto3(f):
@@ -72,10 +67,8 @@ def mock_dynamodb(operation_name, kwargs):
         response = {}
         statement = kwargs['Statement']
         params = kwargs.get('Parameters')
-        global DB
-        db = DB
         response = {
-            'Items': db_query(db, statement, params)
+            'Items': sqlite3_query(statement, params)
         }
 
     return response

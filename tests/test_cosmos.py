@@ -2,7 +2,6 @@ from base64 import b64encode
 import json
 import os
 import re
-import sqlite3
 from urllib import parse as urlparse
 
 import boto3  # type: ignore
@@ -10,19 +9,9 @@ from moto import mock_dynamodb2  # type: ignore
 import responses  # type: ignore
 
 from nosql.plugins.table.dynamodb import deserialize
-from nosql import table
 
 from tests import common as cmn
 from tests.mock_boto3 import mock_boto3
-from tests.mock_boto3 import set_db
-
-
-def set_cosmos_env_vars():
-    os.environ['NOSQL_COSMOS_ACCOUNT'] = 'foo'
-    os.environ['NOSQL_COSMOS_CREDENTIAL'] = b64encode(
-        'mycredential'.encode('utf-8')
-    ).decode()
-    os.environ['NOSQL_COSMOS_DATABASE'] = 'bar'
 
 
 def mock_cosmos(table_keys, db=None):
@@ -101,8 +90,8 @@ def mock_cosmos(table_keys, db=None):
                 is_query = headers.get('x-ms-documentdb-isquery') == 'true'
                 item = json.loads(request.body)
                 if is_query is True:
-                    _items = cmn.db_query(
-                        db, item['query'], item['parameters']
+                    _items = cmn.sqlite3_query(
+                        item['query'], item['parameters']
                     )
                     # TODO(x-ms-continuation)
                     # {'initial_headers': {'x-ms-continuation': 'sometoken'}}
@@ -129,84 +118,46 @@ def mock_cosmos(table_keys, db=None):
         )
 
 
+def setup():
+    os.environ['NOSQL_DB'] = 'cosmos'
+    os.environ['NOSQL_COSMOS_ACCOUNT'] = 'foo'
+    os.environ['NOSQL_COSMOS_CREDENTIAL'] = b64encode(
+        'mycredential'.encode('utf-8')
+    ).decode()
+    os.environ['NOSQL_COSMOS_DATABASE'] = 'bar'
+    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']})
+
+
 @mock_dynamodb2
 @responses.activate
 def test_get_item():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    set_cosmos_env_vars()
-    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']})
-
-    cmn.create_table('hash_range', ['1', '2'], ['a', 'b'])
-    tb = table('hash_range')
-    assert tb.get_item(hk='1', rk='a') == cmn.item('1', 'a')
-    assert tb.get_item(hk='3', rk='a') is None
-
-    cmn.create_table('hash_only', ['1', '2'])
-    tb = table('hash_only')
-    assert tb.get_item(hk='1') == cmn.item('1')
-    assert tb.get_item(hk='3') is None
+    setup()
+    cmn.test_get_item()
 
 
 @mock_dynamodb2
 @responses.activate
 def test_put_item():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    set_cosmos_env_vars()
-    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']})
-
-    cmn.create_table('hash_range')
-    tb = table('hash_range')
-    assert tb.get_item(hk='1', rk='a') is None
-    tb.put_item(cmn.item('1', 'a'))
-    assert tb.get_item(hk='1', rk='a') == cmn.item('1', 'a')
+    setup()
+    cmn.test_put_item()
 
 
 @mock_dynamodb2
 @responses.activate
 def test_put_items():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    set_cosmos_env_vars()
-    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']})
-
-    cmn.create_table('hash_range')
-    tb = table('hash_range')
-    items = cmn.items(['1', '2'], ['a', 'b'])
-    tb.put_items(items)
+    setup()
+    cmn.test_put_items()
 
 
 @mock_dynamodb2
 @responses.activate
 def test_delete_item():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    set_cosmos_env_vars()
-    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']})
-
-    cmn.create_table('hash_range')
-    tb = table('hash_range')
-    tb.put_item(cmn.item('1', 'a'))
-    assert tb.get_item(hk='1', rk='a') == cmn.item('1', 'a')
-    tb.delete_item(hk='1', rk='a')
-    assert tb.get_item(hk='1', rk='a') is None
+    setup()
+    cmn.test_delete_item()
 
 
 @mock_boto3
 @responses.activate
 def test_query():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    db = sqlite3.connect(':memory:')
-    set_cosmos_env_vars()
-    mock_cosmos({'hash_range': ['hk', 'rk'], 'hash_only': ['hk']}, db)
-
-    with db:
-        set_db(db)
-        cmn.create_table('hash_range', ['1', '2'], ['a', 'b'], db)
-
-        tb = table('hash_range')
-        response = tb.query(
-            'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
-            {'@hk': '1', '@num': 4}
-        )
-        assert response == {
-            'items': cmn.items(['1'], ['a', 'b']),
-            'next': None
-        }
+    setup()
+    cmn.test_query()
