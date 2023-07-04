@@ -1,46 +1,55 @@
 import os
+import sqlite3
 
 from moto import mock_dynamodb2  # type: ignore
 
+from nosql.mocks import mock_dynamodbx
 from tests import common as cmn
-from tests.mock_boto3 import mock_boto3
+
+DB = sqlite3.connect(':memory:')
 
 
-def setup():
+def setup_dynamodb():
     os.environ['NOSQL_DB'] = 'dynamodb'
 
 
 @mock_dynamodb2
 def test_get_item():
-    setup()
+    setup_dynamodb()
     cmn.test_get_item()
 
 
 @mock_dynamodb2
 def test_get_item_hook():
-    setup()
+    setup_dynamodb()
     cmn.test_get_item_hook()
 
 
 @mock_dynamodb2
 def test_put_item():
-    setup()
+    setup_dynamodb()
     cmn.test_put_item()
 
 
 @mock_dynamodb2
 def test_put_items():
-    setup()
+    setup_dynamodb()
     cmn.test_put_items()
 
 
 @mock_dynamodb2
 def test_delete_item():
-    setup()
+    setup_dynamodb()
     cmn.test_delete_item()
 
 
-@mock_boto3
+@mock_dynamodb2
 def test_query():
-    setup()
+    setup_dynamodb()
     cmn.test_query()
+
+
+@mock_dynamodbx(db=DB)
+def test_query_sql():
+    setup_dynamodb()
+    cmn.test_query_sql(db=DB)

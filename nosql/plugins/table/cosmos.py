@@ -7,6 +7,8 @@ import pluggy  # type: ignore
 
 import nosql.exceptions as ex
 from nosql.plugin import PM
+from nosql.table import get_dynamodb_query_kwargs
+from nosql.table import get_sql_params
 from nosql.table import TableBase
 from nosql.table import validate_statement
 
@@ -129,24 +131,64 @@ class Table(TableBase):
     @cosmos_ex_handler()
     def query(
         self,
+        key: t.Dict[str, t.Any],
+        filters: t.Optional[t.Dict[str, t.Any]] = None,
+        limit: t.Optional[int] = None,
+        next: t.Optional[str] = None
+    ) -> t.Dict[str, t.Any]:
+        # construct statement, might as well use dynamodb kwargs
+        kwargs = get_dynamodb_query_kwargs(
+            self.name, key, filters
+        )
+        print(f'KWARGS: {kwargs}')
+        statement = f'SELECT * FROM {self.name} WHERE '
+        statement += kwargs['KeyConditionExpression'].replace('= :', '= @')
+        if 'FilterExpression' in kwargs:
+            statement += (
+                ' AND ' + kwargs['FilterExpression'].replace('= :', '= @')
+            )
+        parameters = {
+            f'@{k[1:]}': v
+            for k, v in kwargs['ExpressionAttributeValues'].items()
+        }
+        print(f'STATEMENT: {statement}')
+        print(f'PARAMETERS: {parameters}')
+        return self.query_sql(
+            statement,
+            parameters,
+            limit=limit,
+            next=next
+        )
+
+    @cosmos_ex_handler()
+    def query_sql(
+        self,
         statement: str,
         parameters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        print(f'cosmos.query({statement})')
         validate_statement(statement)
+
+        if parameters is None:
+            parameters = {}
+
+        def _get_param(var, val):
+            return {'name': var, 'value': val}
+
+        (statement, params) = get_sql_params(
+            statement, parameters, _get_param
+        )
+
         kwargs: t.Dict[str, t.Any] = {
             'query': statement,
             'enable_cross_partition_query': True
         }
-        if parameters:
-            kwargs['parameters'] = [
-                {'name': k, 'value': v}
-                for k, v in parameters.items()
-            ]
+        if len(params):
+            kwargs['parameters'] = params
         if limit:
             kwargs['max_item_count'] = limit
+        # TODO(x-ms-continuation)
         # from microsoft / planetary-computer-tasks on github
         # The Python SDK does not support continuation tokens
         # for cross-partition queries.
@@ -154,10 +196,6 @@ class Table(TableBase):
         # response_hook callable doesnt show x-ms-continuation
         # header with or without enable_cross_partition_query
         # even when max_item_count = 1
-        # if next:
-        #     kwargs['initial_headers'] = {
-        #         'x-ms-continuation': next
-        #     }
         container = self._container(self.name)
         items = list(container.query_items(**kwargs))
         for i in range(len(items)):

@@ -11,7 +11,9 @@ import pluggy  # type: ignore
 
 import nosql.exceptions as ex
 from nosql.plugin import PM
-from nosql.table import get_params
+from nosql.table import get_dynamodb_param
+from nosql.table import get_dynamodb_query_kwargs
+from nosql.table import get_sql_params
 from nosql.table import TableBase
 from nosql.table import validate_statement
 
@@ -121,27 +123,39 @@ class Table(TableBase):
     @dynamodb_ex_handler()
     def query(
         self,
+        key: t.Dict[str, t.Any],
+        filters: t.Optional[t.Dict[str, t.Any]] = None,
+        limit: t.Optional[int] = None,
+        next: t.Optional[str] = None
+    ) -> t.Dict[str, t.Any]:
+        kwargs = get_dynamodb_query_kwargs(
+            self.name, key, filters
+        )
+        if next is not None:
+            kwargs['ExclusiveStartKey'] = next
+        if limit is not None:
+            kwargs['Limit'] = limit
+        response = self.table.query(**kwargs)
+        return {
+            'items': deserialize(response.get('Items', [])),
+            'next': response.get('LastEvaluatedKey')
+        }
+
+    @dynamodb_ex_handler()
+    def query_sql(
+        self,
         statement: str,
         parameters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        print(f'dynamodb.query({statement})')
         validate_statement(statement)
+
         if parameters is None:
             parameters = {}
 
-        def _get_param(var, val):
-            key = (
-                'N' if isinstance(val, float) or isinstance(val, int)
-                else 'NULL' if val is None
-                else 'BOOL' if isinstance(val, bool)
-                else 'S'
-            )
-            return {key: val}
-
-        (statement, params) = get_params(
-            statement, parameters, _get_param, '?'
+        (statement, params) = get_sql_params(
+            statement, parameters, get_dynamodb_param, '?'
         )
 
         client = self.session.client('dynamodb')
@@ -155,7 +169,6 @@ class Table(TableBase):
         if len(params):
             kwargs['Parameters'] = params
 
-        print(f'dynamodb.execute_statement({kwargs})')
         response = client.execute_statement(**kwargs)
         items = deserialize(response.get('Items', []))
 

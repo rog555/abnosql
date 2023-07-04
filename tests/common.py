@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import typing as t
 
 import boto3  # type: ignore
@@ -39,7 +38,7 @@ def items(hks=None, rks=None):
 
 def create_table(name, hks=None, rks=None, _db=None):
 
-    # sqlite3 backend for query
+    # sqlite3 backend for query_sql()
     if _db is not None:
         di = item(hks[0], rks[0] if rks else None)
         cols = ', '.join([
@@ -96,40 +95,6 @@ def create_table(name, hks=None, rks=None, _db=None):
         _items = items(hks, rks)
         for _item in _items:
             _table.put_item(Item=_item)
-
-
-def sqlite3_query(statement, params):
-    db = sqlite3.connect(':memory:')
-    with db:
-        create_table('hash_range', ['1', '2'], ['a', 'b'], db)
-        print(f'sqlite3_query({statement}) params: {params}')
-        if params is not None:
-            params = tuple(
-                _['value'] if 'value' in _
-                else list(_.values())[0]
-                for _ in params
-            )
-
-        cur = None
-        if params is not None:
-            cur = db.cursor().execute(statement, params)
-        else:
-            cur = db.cursor().execute(statement)
-        cols = [_[0] for _ in cur.description]
-        items = []
-        for row in cur.fetchall():
-            item = dict(zip(cols, row))
-            for key in item.keys():
-                val = item[key]
-                if not isinstance(val, str) or len(val) < 3:
-                    continue
-                if val[0] in '[{' and val[-1] in '}]':
-                    try:
-                        item[key] = json.loads(val)
-                    except Exception:
-                        item[key] = val
-            items.append(item)
-    return items
 
 
 def test_get_item(config=None):
@@ -189,9 +154,23 @@ def test_delete_item(config=None):
     assert tb.get_item(hk='1', rk='a') is None
 
 
-def test_query(config=None):
+def test_query(config=None, db=None):
     tb = table('hash_range', config)
+    create_table('hash_range', ['1', '2'], ['a', 'b'], db)
     response = tb.query(
+        {'hk': '1'},
+        {'rk': 'a'}
+    )
+    assert response == {
+        'items': items(['1'], ['a']),
+        'next': None
+    }
+
+
+def test_query_sql(config=None, db=None):
+    create_table('hash_range', ['1', '2'], ['a', 'b'], db)
+    tb = table('hash_range', config)
+    response = tb.query_sql(
         'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
         {'@hk': '1', '@num': 4}
     )
