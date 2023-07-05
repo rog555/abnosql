@@ -8,10 +8,9 @@ import pluggy  # type: ignore
 import nosql.exceptions as ex
 from nosql.plugin import PM
 from nosql.table import deserialize
-from nosql.table import get_dynamodb_param
-from nosql.table import get_dynamodb_query_kwargs
 from nosql.table import get_sql_params
 from nosql.table import TableBase
+from nosql.table import validate_query_attrs
 from nosql.table import validate_statement
 
 hookimpl = pluggy.HookimplMarker('nosql.table')
@@ -47,6 +46,51 @@ def dynamodb_ex_handler(raise_not_found: t.Optional[bool] = True):
                 raise ex.PluginException(e)
         return wrapper
     return decorator
+
+
+def get_dynamodb_param(var, val):
+    key = (
+        'N' if isinstance(val, float) or isinstance(val, int)
+        else 'NULL' if val is None
+        else 'BOOL' if isinstance(val, bool)
+        else 'S'
+    )
+    return {key: str(val)}
+
+
+def get_dynamodb_query_kwargs(
+    name: str,
+    key: t.Dict[str, t.Any],
+    filters: t.Optional[t.Dict[str, t.Any]] = None
+) -> t.Dict:
+    if len(key) > 2 or len(key) == 0:
+        raise ValueError('key length must be 1 or 2')
+    filters = filters or {}
+    validate_query_attrs(key, filters)
+
+    _values = {
+        f':{k}': v
+        for k, v in key.items()
+    }
+    _names = {}
+    for k, v in filters.items():
+        _names[f'#{k}'] = k
+        _values[f':{k}'] = v
+
+    kwargs = {
+        'TableName': name,
+        'Select': 'ALL_ATTRIBUTES',
+        'KeyConditionExpression': ' AND '.join([
+            f'{k} = :{k}' for k in key.keys()
+        ]),
+        'ExpressionAttributeNames': _names,
+        'ExpressionAttributeValues': _values
+    }
+    if len(filters):
+        kwargs['FilterExpression'] = ' AND '.join([
+            f'{k} = :{k}' for k in filters.keys()
+        ])
+    return kwargs
 
 
 class Table(TableBase):
@@ -129,14 +173,10 @@ class Table(TableBase):
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         validate_statement(statement)
-
-        if parameters is None:
-            parameters = {}
-
+        parameters = parameters or {}
         (statement, params) = get_sql_params(
             statement, parameters, get_dynamodb_param, '?'
         )
-
         client = self.session.client('dynamodb')
         kwargs: t.Dict[str, t.Any] = {
             'Statement': statement

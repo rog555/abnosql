@@ -1,15 +1,15 @@
 import functools
 import os
-from traceback import print_exc
+# from traceback import print_exc
 import typing as t
 
 import pluggy  # type: ignore
 
 import nosql.exceptions as ex
 from nosql.plugin import PM
-from nosql.table import get_dynamodb_query_kwargs
 from nosql.table import get_sql_params
 from nosql.table import TableBase
+from nosql.table import validate_query_attrs
 from nosql.table import validate_statement
 
 hookimpl = pluggy.HookimplMarker('nosql.table')
@@ -35,7 +35,7 @@ def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
             except CosmosHttpResponseError as e:
                 raise ex.ConfigException(e)
             except Exception as e:
-                print_exc()
+                # print_exc()
                 raise ex.PluginException(e)
         return wrapper
     return decorator
@@ -140,20 +140,22 @@ class Table(TableBase):
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        # construct statement, might as well use dynamodb kwargs
-        kwargs = get_dynamodb_query_kwargs(
-            self.name, key, filters
-        )
-        statement = f'SELECT * FROM {self.name} WHERE '
-        statement += kwargs['KeyConditionExpression'].replace('= :', '= @')
-        if 'FilterExpression' in kwargs:
-            statement += (
-                ' AND ' + kwargs['FilterExpression'].replace('= :', '= @')
-            )
+        filters = filters or {}
+        validate_query_attrs(key, filters)
         parameters = {
-            f'@{k[1:]}': v
-            for k, v in kwargs['ExpressionAttributeValues'].items()
+            f'@{k}': v
+            for k, v in filters.items()
         }
+        parameters.update({
+            f'@{k}': v
+            for k, v in key.items()
+        })
+        statement = f'SELECT * FROM {self.name}'
+        op = 'WHERE'
+        for param in parameters.keys():
+            statement += f' {op} {self.name}.{param[1:]} = {param}'
+            op = 'AND'
+
         return self.query_sql(
             statement,
             parameters,
@@ -170,9 +172,7 @@ class Table(TableBase):
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         validate_statement(statement)
-
-        if parameters is None:
-            parameters = {}
+        parameters = parameters or {}
 
         def _get_param(var, val):
             return {'name': var, 'value': val}
@@ -197,6 +197,7 @@ class Table(TableBase):
         # response_hook callable doesnt show x-ms-continuation
         # header with or without enable_cross_partition_query
         # even when max_item_count = 1
+        # print(f'KWARGS: {kwargs}')
         container = self._container(self.name)
         items = list(container.query_items(**kwargs))
         for i in range(len(items)):

@@ -1,19 +1,19 @@
 
 class NoSQLException(Exception):
-    pass
+    pass  # noqa
 
 
 class NotFoundException(NoSQLException):
-    pass
+    pass  # noqa
 
 
 class ConfigException(NoSQLException):
-    pass
+    pass  # noqa
 
 
 class PluginException(NoSQLException):
-    pass
+    pass  # noqa
 
 
 class ValidationException(NoSQLException):
-    pass
+    pass  # noqa

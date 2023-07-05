@@ -86,28 +86,6 @@ class TableBase(metaclass=ABCMeta):
         pass
 
 
-def validate_statement(statement: str):
-    parsed = sqlparse.parse(statement)[0]
-
-    def _extract_non_select_tokens(tokens):
-        invalid_tokens = []
-        for token in tokens:
-            name = token.value.upper()
-            if token.is_group:
-                invalid_tokens.extend(_extract_non_select_tokens(token))
-            elif token.ttype is sqlparse.tokens.DML and name != 'SELECT':
-                invalid_tokens.append(name)
-            elif token.ttype is sqlparse.tokens.DDL:
-                invalid_tokens.append(name)
-        return invalid_tokens
-
-    # validate that SELECT is only specified
-    invalid_tokens = _extract_non_select_tokens(parsed.tokens)
-    invalid_tokens = sorted(set(invalid_tokens))
-    if len(invalid_tokens) > 0:
-        raise ex.ValidationException('only SELECT is allowed')
-
-
 def get_sql_params(
     statement: str,
     parameters: t.Dict[str, t.Any],
@@ -152,6 +130,14 @@ def json_serial(obj):
     raise TypeError('type not serializable')
 
 
+def quote_str(str):
+    return "'" + str.translate(
+        str.maketrans({
+            "'": "\\'"
+        })
+    ) + "'"
+
+
 def deserialize(obj, deserializer=None):
     if deserializer is None:
         deserializer = json_serial
@@ -160,25 +146,7 @@ def deserialize(obj, deserializer=None):
     return json.loads(json.dumps(obj, default=deserializer))
 
 
-def get_dynamodb_param(var, val):
-    key = (
-        'N' if isinstance(val, float) or isinstance(val, int)
-        else 'NULL' if val is None
-        else 'BOOL' if isinstance(val, bool)
-        else 'S'
-    )
-    return {key: str(val)}
-
-
-def get_dynamodb_query_kwargs(
-    name: str,
-    key: t.Dict[str, t.Any],
-    filters: t.Optional[t.Dict[str, t.Any]] = None
-) -> t.Dict:
-    if len(key) > 2 or len(key) == 0:
-        raise ValueError('key length must be 1 or 2')
-    if filters is None:
-        filters = {}
+def validate_query_attrs(key: t.Dict, filters: t.Dict):
     _name_pat = re.compile(r'^[a-zA-Z09_-]+$')
 
     def _validate_key_names(obj):
@@ -188,31 +156,31 @@ def get_dynamodb_query_kwargs(
         _validate_key_names(key) + _validate_key_names(filters)
     ))
     if len(invalid):
-        raise ValueError('invalid key or filter keys: ' + ', '.join(invalid))
+        raise ex.ValidationException(
+            'invalid key or filter keys: ' + ', '.join(invalid)
+        )
 
-    _values = {
-        f':{k}': v
-        for k, v in key.items()
-    }
-    _names = {}
-    for k, v in filters.items():
-        _names[f'#{k}'] = k
-        _values[f':{k}'] = v
 
-    kwargs = {
-        'TableName': name,
-        'Select': 'ALL_ATTRIBUTES',
-        'KeyConditionExpression': ' AND '.join([
-            f'{k} = :{k}' for k in key.keys()
-        ]),
-        'ExpressionAttributeNames': _names,
-        'ExpressionAttributeValues': _values
-    }
-    if len(filters):
-        kwargs['FilterExpression'] = ' AND '.join([
-            f'{k} = :{k}' for k in filters.keys()
-        ])
-    return kwargs
+def validate_statement(statement: str):
+    parsed = sqlparse.parse(statement)[0]
+
+    def _extract_non_select_tokens(tokens):
+        invalid_tokens = []
+        for token in tokens:
+            name = token.value.upper()
+            if token.is_group:
+                invalid_tokens.extend(_extract_non_select_tokens(token))
+            elif token.ttype is sqlparse.tokens.DML and name != 'SELECT':
+                invalid_tokens.append(name)
+            elif token.ttype is sqlparse.tokens.DDL:
+                invalid_tokens.append(name)
+        return invalid_tokens
+
+    # validate that SELECT is only specified
+    invalid_tokens = _extract_non_select_tokens(parsed.tokens)
+    invalid_tokens = sorted(set(invalid_tokens))
+    if len(invalid_tokens) > 0:
+        raise ex.ValidationException('only SELECT is allowed')
 
 
 def table(

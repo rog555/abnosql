@@ -2,7 +2,6 @@
 from importlib import import_module
 import os
 from pkgutil import iter_modules
-import types
 import typing as t
 
 import pluggy  # type: ignore
@@ -91,11 +90,6 @@ def get_pm(
     spec_module = getattr(entity_module, f'{prefix}Specs', None)
     if spec_module and issubclass(spec_module, PluginSpec):  # type: ignore
         pm.add_hookspecs(spec_module)
-
-    hook_module = getattr(entity_module, f'{prefix}Hooks', None)
-    if hook_module and issubclass(hook_module, PluginImpl):  # type: ignore
-        hook_module = t.cast(types.FunctionType, hook_module)
-        pm.register(hook_module())
 
     for info in iter_modules([os.path.join(PKG_ROOT, 'plugins', entity)]):
         path = f'{PKG_NAME}.plugins.{entity}.{info.name}'

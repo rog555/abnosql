@@ -6,6 +6,7 @@ import sqlglot  # type: ignore
 from sqlglot.executor import execute  # type: ignore
 
 from nosql.table import deserialize
+from nosql.table import quote_str
 
 
 # won't need this when moto dynamdob supports execute_statement / partiql
@@ -14,15 +15,7 @@ def query_table(
     parameters: t.Optional[t.List[t.Dict[str, t.Any]]] = None,
     table_name: t.Optional[str] = None
 ) -> t.List[t.Dict]:
-    if parameters is None:
-        parameters = []
-
-    def _quote(str):
-        return "'" + str.translate(
-            str.maketrans({
-                "'": "\\'"
-            })
-        ) + "'"
+    parameters = parameters or []
 
     # find ? dynamodb placeholders
     if '?' in statement:
@@ -30,7 +23,7 @@ def query_table(
         for pd in parameters:
             _type, _val = list(pd.items())[0]
             if _type == 'S':
-                _val = _quote(_val)
+                _val = quote_str(_val)
             _pparams.append(_val)
         statement = statement.replace('?', '{}').format(*_pparams)
 
@@ -39,7 +32,7 @@ def query_table(
         _nparams = {pd['name']: pd['value'] for pd in parameters}
         for _param, _val in _nparams.items():
             if isinstance(_val, str):
-                _val = _quote(_val)
+                _val = quote_str(_val)
             statement = statement.replace(_param, str(_val))
 
     # add params into statement
