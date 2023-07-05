@@ -22,7 +22,7 @@ hookspec = pluggy.HookspecMarker('nosql.table')
 class TableSpecs(plugin.PluginSpec):
 
     @hookspec(firstresult=True)
-    def config(self) -> t.Dict:  # type: ignore[empty-body] # noqa E501
+    def set_config(self, table: str) -> t.Dict:  # type: ignore[empty-body] # noqa E501
         pass
 
     @hookspec(firstresult=True)

@@ -66,12 +66,16 @@ class Table(TableBase):
     ) -> None:
         self.pm = pm
         self.name = name
+        self.set_config(config)
+        self.database_client = None
+
+    @cosmos_ex_handler()
+    def set_config(self, config: t.Optional[dict]):
         if config is None:
             config = {}
-        _config = self.pm.hook.config()
+        _config = self.pm.hook.set_config(table=self.name)
         if _config:
             config = t.cast(t.Dict, _config)
-        self.database_client = None
         self.config = config
 
     def _database_client(self):

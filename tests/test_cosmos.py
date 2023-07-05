@@ -52,6 +52,14 @@ def test_delete_item():
 @mock_cosmos
 @mock_dynamodb2
 @responses.activate
+def test_hooks():
+    setup_cosmos()
+    cmn.test_hooks()
+
+
+@mock_cosmos
+@mock_dynamodb2
+@responses.activate
 def test_query():
     setup_cosmos()
     cmn.test_query()

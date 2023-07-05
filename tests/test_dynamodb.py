@@ -17,12 +17,6 @@ def test_get_item():
 
 
 @mock_dynamodb2
-def test_get_item_hook():
-    setup_dynamodb()
-    cmn.test_get_item_hook()
-
-
-@mock_dynamodb2
 def test_put_item():
     setup_dynamodb()
     cmn.test_put_item()
@@ -38,6 +32,12 @@ def test_put_items():
 def test_delete_item():
     setup_dynamodb()
     cmn.test_delete_item()
+
+
+@mock_dynamodb2
+def test_hooks():
+    setup_dynamodb()
+    cmn.test_hooks()
 
 
 @mock_dynamodb2

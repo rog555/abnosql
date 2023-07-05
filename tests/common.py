@@ -75,27 +75,6 @@ def test_get_item(config=None):
     assert tb.get_item(hk='3') is None
 
 
-def test_get_item_hook(config=None):
-    tb = table('hash_range', config)
-    create_table('hash_range', ['1', '2'], ['a', 'b'])
-
-    hookimpl = pluggy.HookimplMarker('nosql.table')
-    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
-
-    class TableHooks:
-
-        @hookimpl
-        def get_item_post(self, table: str, item: t.Dict) -> t.Dict:
-            return {'foo': 'bar'}
-
-    pm = plugin.get_pm('table')
-    pm.register(TableHooks())
-
-    assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
-    pm.unregister(pm.get_plugin('dynamodb'))
-    plugin.clear_pms()
-
-
 def test_put_item(config=None):
     tb = table('hash_range', config)
     create_table('hash_range')
@@ -117,6 +96,67 @@ def test_delete_item(config=None):
     assert tb.get_item(hk='1', rk='a') == item('1', 'a')
     tb.delete_item(hk='1', rk='a')
     assert tb.get_item(hk='1', rk='a') is None
+
+
+def test_hooks(config=None):
+    create_table('hash_range', ['1', '2'], ['a', 'b'])
+    hookimpl = pluggy.HookimplMarker('nosql.table')
+
+    class TableHooks:
+
+        def __init__(self, table) -> None:
+            self.called: t.Dict = {}
+            self.table = table
+
+        @hookimpl
+        def set_config(self, table: str) -> t.Dict:
+            self.called['set_config'] = True
+            assert self.table == table
+            return {'a': 'b'}
+
+        @hookimpl
+        def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # noqa E501
+            self.called['get_item_post'] = True
+            assert self.table == table
+            return {'foo': 'bar'}
+
+        @hookimpl
+        def put_item_post(self, table: str, item: t.Dict):
+            assert self.table == table
+            self.called['put_item_post'] = True
+
+        @hookimpl
+        def put_items_post(self, table: str, items: t.Iterable[t.Dict]):  # noqa E501
+            assert self.table == table
+            self.called['put_items_post'] = True
+
+        @hookimpl
+        def delete_item_post(self, table: str, key: t.Dict):  # noqa E501
+            assert self.table == table
+            self.called['delete_item_post'] = True
+
+    hooks = TableHooks('hash_range')
+    pm = plugin.get_pm('table')
+    pm.register(hooks)
+
+    tb = table('hash_range')
+
+    assert 'set_config' in hooks.called
+    assert tb.config == {'a': 'b'}
+
+    assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
+    assert 'get_item_post' in hooks.called
+
+    tb.put_item(item('1', 'a'))
+    assert 'put_item_post' in hooks.called
+
+    tb.put_items(items(['1', '2'], ['a', 'b']))
+    assert 'put_items_post' in hooks.called
+
+    tb.delete_item(hk='1', rk='a')
+    assert 'delete_item_post' in hooks.called
+
+    plugin.clear_pms()
 
 
 def test_query(config=None):
