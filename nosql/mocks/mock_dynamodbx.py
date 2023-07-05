@@ -1,7 +1,9 @@
 import functools
+import json
 from unittest.mock import patch
 
 import botocore  # type: ignore
+from dynamodb_json import json_util  # type: ignore
 
 from nosql.mocks import query_table
 
@@ -12,8 +14,12 @@ def mock_dynamodbx(f):
 
     # won't need this when moto supports ExecuteStatement
     def execute_statement(kwargs):
+        items = []
+        _items = query_table(kwargs['Statement'], kwargs.get('Parameters'))
+        for item in _items:
+            items.append(json.loads(json_util.dumps(item)))
         return {
-            'Items': query_table(kwargs['Statement'], kwargs.get('Parameters'))
+            'Items': items
         }
 
     FUNC_MAP = {

@@ -1,8 +1,10 @@
 import functools
-from traceback import print_exc
+import json
 import typing as t
 
 from botocore.exceptions import ClientError  # type: ignore
+from botocore.exceptions import NoCredentialsError  # type: ignore
+from dynamodb_json import json_util  # type: ignore
 import pluggy  # type: ignore
 
 import nosql.exceptions as ex
@@ -39,23 +41,29 @@ def dynamodb_ex_handler(raise_not_found: t.Optional[bool] = True):
             except ClientError as e:
                 code = e.response['Error']['Code']
                 if raise_not_found and code in ['ResourceNotFoundException']:
-                    raise ex.NotFoundException(e)
-                raise ex.ValidationException(e)
+                    raise ex.NotFoundException(e) from None
+                elif code == 'UnrecognizedClientException':
+                    raise ex.ConfigException(e) from None
+                raise ex.ValidationException(e) from None
+            except NoCredentialsError as e:
+                raise ex.ConfigException(e) from None
             except Exception as e:
-                print_exc()
                 raise ex.PluginException(e)
         return wrapper
     return decorator
 
 
-def get_dynamodb_param(var, val):
-    key = (
+def serialize_dynamodb_type(var, val):
+    _type = (
         'N' if isinstance(val, float) or isinstance(val, int)
+        else 'M' if isinstance(val, float)
+        else 'L' if isinstance(val, list)
+        else 'B' if isinstance(val, bytes)
         else 'NULL' if val is None
         else 'BOOL' if isinstance(val, bool)
         else 'S'
     )
-    return {key: str(val)}
+    return {_type: str(val)}
 
 
 def get_dynamodb_query_kwargs(
@@ -83,9 +91,10 @@ def get_dynamodb_query_kwargs(
         'KeyConditionExpression': ' AND '.join([
             f'{k} = :{k}' for k in key.keys()
         ]),
-        'ExpressionAttributeNames': _names,
         'ExpressionAttributeValues': _values
     }
+    if len(_names):
+        kwargs['ExpressionAttributeNames'] = _names
     if len(filters):
         kwargs['FilterExpression'] = ' AND '.join([
             f'{k} = :{k}' for k in filters.keys()
@@ -175,7 +184,7 @@ class Table(TableBase):
         validate_statement(statement)
         parameters = parameters or {}
         (statement, params) = get_sql_params(
-            statement, parameters, get_dynamodb_param, '?'
+            statement, parameters, serialize_dynamodb_type, '?'
         )
         client = self.session.client('dynamodb')
         kwargs: t.Dict[str, t.Any] = {
@@ -189,7 +198,11 @@ class Table(TableBase):
             kwargs['Parameters'] = params
 
         response = client.execute_statement(**kwargs)
-        items = deserialize(response.get('Items', []))
+        items = []
+        _items = response.get('Items', [])
+        for item in _items:
+            items.append(json_util.loads(json.dumps(item)))
+
         return {
             'items': items,
             'next': response.get('NextToken')

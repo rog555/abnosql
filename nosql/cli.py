@@ -56,8 +56,12 @@ def get_obj(argname, _obj, file_only=False):
 
 
 def get_config(obj):
+    config_file = os.environ.get('NOSQL_CONFIG')
     if obj is None:
-        return None
+        if config_file is not None and os.path.isfile(config_file):
+            obj = config_file
+        else:
+            return None
     return get_obj('--config', obj, True)
 
 

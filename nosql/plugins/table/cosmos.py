@@ -1,6 +1,5 @@
 import functools
 import os
-# from traceback import print_exc
 import typing as t
 
 import pluggy  # type: ignore
@@ -23,6 +22,10 @@ except ImportError:
 
 
 def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
+
+    def get_message(e):
+        return e.message.splitlines()[0].replace('Message: ', '')
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -30,12 +33,14 @@ def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
                 return func(*args, **kwargs)
             except CosmosResourceNotFoundError as e:
                 if raise_not_found:
-                    raise ex.NotFoundException(e)
+                    raise ex.NotFoundException(get_message(e)) from None
                 return None
             except CosmosHttpResponseError as e:
-                raise ex.ConfigException(e)
+                code = e.status_code
+                if code in [400]:
+                    raise ex.ValidationException(get_message(e)) from None
+                raise ex.ConfigException(get_message(e)) from None
             except Exception as e:
-                # print_exc()
                 raise ex.PluginException(e)
         return wrapper
     return decorator

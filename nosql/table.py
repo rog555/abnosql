@@ -6,7 +6,6 @@ import os
 import re
 import typing as t
 
-
 from boto3.dynamodb.types import Binary  # type: ignore
 from boto3.dynamodb.types import Decimal  # type: ignore
 import pluggy  # type: ignore
