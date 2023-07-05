@@ -1,17 +1,11 @@
 from base64 import b64encode
 import os
-import sqlite3
 
 from moto import mock_dynamodb2  # type: ignore
 import responses  # type: ignore
 
 from nosql.mocks import mock_cosmos
-from nosql.mocks import mock_dynamodbx
 from tests import common as cmn
-
-
-TABLE_KEYS = {'hash_range': ['hk', 'rk'], 'hash_only': ['hk']}
-DB = sqlite3.connect(':memory:')
 
 
 def setup_cosmos():
@@ -23,15 +17,15 @@ def setup_cosmos():
     os.environ['NOSQL_COSMOS_DATABASE'] = 'bar'
 
 
-@mock_cosmos(TABLE_KEYS)
 @mock_dynamodb2
+@mock_cosmos
 @responses.activate
 def test_get_item():
     setup_cosmos()
     cmn.test_get_item()
 
 
-@mock_cosmos(TABLE_KEYS)
+@mock_cosmos
 @mock_dynamodb2
 @responses.activate
 def test_put_item():
@@ -39,7 +33,7 @@ def test_put_item():
     cmn.test_put_item()
 
 
-@mock_cosmos(TABLE_KEYS)
+@mock_cosmos
 @mock_dynamodb2
 @responses.activate
 def test_put_items():
@@ -47,7 +41,7 @@ def test_put_items():
     cmn.test_put_items()
 
 
-@mock_cosmos(TABLE_KEYS)
+@mock_cosmos
 @mock_dynamodb2
 @responses.activate
 def test_delete_item():
@@ -55,17 +49,17 @@ def test_delete_item():
     cmn.test_delete_item()
 
 
-@mock_cosmos(TABLE_KEYS, db=DB)
-@mock_dynamodbx(db=DB)
+@mock_cosmos
+@mock_dynamodb2
 @responses.activate
 def test_query():
     setup_cosmos()
-    cmn.test_query(db=DB)
+    cmn.test_query()
 
 
-@mock_cosmos(TABLE_KEYS, db=DB)
-@mock_dynamodbx(db=DB)
+@mock_cosmos
+@mock_dynamodb2
 @responses.activate
 def test_query_sql():
     setup_cosmos()
-    cmn.test_query_sql(db=DB)
+    cmn.test_query_sql()

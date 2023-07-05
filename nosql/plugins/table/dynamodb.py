@@ -1,16 +1,13 @@
-from datetime import datetime
 import functools
-import json
 from traceback import print_exc
 import typing as t
 
-from boto3.dynamodb.types import Binary  # type: ignore
-from boto3.dynamodb.types import Decimal  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 import pluggy  # type: ignore
 
 import nosql.exceptions as ex
 from nosql.plugin import PM
+from nosql.table import deserialize
 from nosql.table import get_dynamodb_param
 from nosql.table import get_dynamodb_query_kwargs
 from nosql.table import get_sql_params
@@ -25,28 +22,6 @@ try:
     # import botocore.exceptions
 except ImportError:
     MISSING_DEPS = True
-
-
-# http://stackoverflow.com/questions/11875770/how-to-overcome-datetime-datetime-not-json-serializable-in-python  # noqa
-# see https://github.com/Alonreznik/dynamodb-json/blob/master/dynamodb_json/json_util.py  # noqa
-def json_serial(obj):
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    if isinstance(obj, Decimal):
-        return float(obj) if obj != obj.to_integral_value() else int(obj)
-    if isinstance(obj, Binary):
-        return obj.value
-    if isinstance(obj, set):
-        return list(obj)
-    raise TypeError('type not serializable')
-
-
-def deserialize(obj, deserializer=None):
-    if deserializer is None:
-        deserializer = json_serial
-    elif callable(deserializer):
-        return deserializer(obj)
-    return json.loads(json.dumps(obj, default=deserializer))
 
 
 def get_key(**kwargs):
@@ -171,8 +146,6 @@ class Table(TableBase):
 
         response = client.execute_statement(**kwargs)
         items = deserialize(response.get('Items', []))
-
-        print(json.dumps(response, indent=2))
         return {
             'items': items,
             'next': response.get('NextToken')

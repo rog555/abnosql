@@ -1,9 +1,14 @@
 from abc import ABCMeta  # type: ignore
 from abc import abstractmethod
+from datetime import datetime
+import json
 import os
 import re
 import typing as t
 
+
+from boto3.dynamodb.types import Binary  # type: ignore
+from boto3.dynamodb.types import Decimal  # type: ignore
 import pluggy  # type: ignore
 import sqlparse  # type: ignore
 
@@ -131,6 +136,28 @@ def get_sql_params(
         for var in parameters.keys():
             statement = statement.replace(var, replace)
     return (statement, params)
+
+
+# http://stackoverflow.com/questions/11875770/how-to-overcome-datetime-datetime-not-json-serializable-in-python  # noqa
+# see https://github.com/Alonreznik/dynamodb-json/blob/master/dynamodb_json/json_util.py  # noqa
+def json_serial(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj) if obj != obj.to_integral_value() else int(obj)
+    if isinstance(obj, Binary):
+        return obj.value
+    if isinstance(obj, set):
+        return list(obj)
+    raise TypeError('type not serializable')
+
+
+def deserialize(obj, deserializer=None):
+    if deserializer is None:
+        deserializer = json_serial
+    elif callable(deserializer):
+        return deserializer(obj)
+    return json.loads(json.dumps(obj, default=deserializer))
 
 
 def get_dynamodb_param(var, val):

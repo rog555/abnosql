@@ -3,19 +3,17 @@ from unittest.mock import patch
 
 import botocore  # type: ignore
 
-from nosql.mocks.mock_common import sqlite3_query
+from nosql.mocks import query_table
 
 ORIG_MAKE_API_CALL = botocore.client.BaseClient._make_api_call
 
 
-def mock_dynamodbx(db=None):
+def mock_dynamodbx(f):
 
     # won't need this when moto supports ExecuteStatement
     def execute_statement(kwargs):
-        statement = kwargs['Statement']
-        params = kwargs.get('Parameters')
         return {
-            'Items': sqlite3_query(db, statement, params)
+            'Items': query_table(kwargs['Statement'], kwargs.get('Parameters'))
         }
 
     FUNC_MAP = {
@@ -35,12 +33,9 @@ def mock_dynamodbx(db=None):
             response = ORIG_MAKE_API_CALL(self, operation_name, kwargs)
         return response
 
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            _make_api_call = 'botocore.client.BaseClient._make_api_call'
-            with patch(_make_api_call, _mock):
-                return func(*args, **kwargs)
-        return wrapper
-
-    return decorator
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        _make_api_call = 'botocore.client.BaseClient._make_api_call'
+        with patch(_make_api_call, _mock):
+            return f(*args, **kwargs)
+    return decorated

@@ -47,8 +47,8 @@ def get_key_kwargs(**kwargs):
         raise ValueError('key length must be 1 or 2')
     keys = list(key.keys())
     kwargs = {
-        'item': key[keys[0]],
-        'partition_key': key[keys[1]] if len(keys) > 1 else key[keys[0]]
+        'item': key[keys[-1]],
+        'partition_key': key[keys[0]]
     }
     return kwargs
 
@@ -140,7 +140,6 @@ class Table(TableBase):
         kwargs = get_dynamodb_query_kwargs(
             self.name, key, filters
         )
-        print(f'KWARGS: {kwargs}')
         statement = f'SELECT * FROM {self.name} WHERE '
         statement += kwargs['KeyConditionExpression'].replace('= :', '= @')
         if 'FilterExpression' in kwargs:
@@ -151,8 +150,6 @@ class Table(TableBase):
             f'@{k[1:]}': v
             for k, v in kwargs['ExpressionAttributeValues'].items()
         }
-        print(f'STATEMENT: {statement}')
-        print(f'PARAMETERS: {parameters}')
         return self.query_sql(
             statement,
             parameters,

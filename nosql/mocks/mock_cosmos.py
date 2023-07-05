@@ -6,26 +6,30 @@ from urllib import parse as urlparse
 import boto3  # type: ignore
 import responses  # type: ignore
 
-import nosql.mocks.mock_common as cmn
-from nosql.plugins.table.dynamodb import deserialize
-from nosql.table import get_dynamodb_query_kwargs
+from nosql.mocks import query_table
+from nosql.table import deserialize
 
 
-def mock_cosmos(table_keys, db=None):
+def mock_cosmos(f):
 
-    def _get_key(headers, table_name, params, doc_id=None):
-        schema_keys = table_keys[table_name]
+    def _get_key(headers, _table, doc_id):
+        hk = None
+        rk = None
+        for kd in _table.key_schema:
+            if kd['KeyType'] == 'HASH':
+                hk = kd['AttributeName']
+            else:
+                rk = kd['AttributeName']
         _part_keys = headers.get('x-ms-documentdb-partitionkey')
-        _part_key = schema_keys[0]
         if isinstance(_part_keys, str) and len(_part_keys) > 0:
             _part_val = json.loads(_part_keys)[0]
         else:
-            _part_val = params[_part_key]
+            _part_val = doc_id
         key = {
-            _part_key: _part_val
+            hk: _part_val
         }
-        if len(schema_keys) > 1:
-            key[schema_keys[1]] = params.get(schema_keys[1], doc_id)
+        if rk is not None:
+            key[rk] = doc_id
         return key
 
     def _callback(request):
@@ -45,7 +49,7 @@ def mock_cosmos(table_keys, db=None):
             )
 
         parts = [_ for _ in path.split('/') if _ != '']
-        print(f'REQ: {request.method} {path} H: {headers} B: {request.body}')
+        # print(f'REQ: {request.method} {path} H: {headers} B: {request.body}')
 
         # required for CosmosClient
         if request.method == 'GET' and path == '/':
@@ -61,15 +65,13 @@ def mock_cosmos(table_keys, db=None):
             return _response(404)
 
         table_name = parts[3]
-        if table_name not in table_keys:
-            return _response(404)
 
         # use moto dynamodb to mock cosmos :-/
         _table = boto3.resource('dynamodb').Table(table_name)
 
         # /dbs/{database}/colls/{table}/docs/{docid}
         if len(parts) == 6 and parts[-2] == 'docs':
-            key = _get_key(headers, table_name, {}, parts[-1])
+            key = _get_key(headers, _table, parts[-1])
             if request.method == 'GET':
                 response = _table.get_item(Key=key)
                 _item = deserialize(response).get('Item')
@@ -85,29 +87,11 @@ def mock_cosmos(table_keys, db=None):
                 is_query = headers.get('x-ms-documentdb-isquery') == 'true'
                 item = json.loads(request.body)
                 if is_query is True:
-                    _items = []
-
                     # TODO(x-ms-continuation)
                     # {'initial_headers': {'x-ms-continuation': 'sometoken'}}
-                    # use sqlite as query_sql() backend
-                    if db is not None:
-                        _items = cmn.sqlite3_query(
-                            db, item['query'], item['parameters']
-                        )
-                    # use dynamodb for query() backend
-                    else:
-                        _params = {
-                            kv['name'].replace('@', ''): kv['value']
-                            for kv in item['parameters']
-                        }
-                        _key = _get_key(headers, table_name, _params)
-                        _filters = {
-                            k: v for k, v in _params.items() if k not in _key
-                        }
-                        _resp = _table.query(**get_dynamodb_query_kwargs(
-                            table_name, _key, _filters
-                        ))
-                        _items = _resp.get('Items', [])
+                    _items = query_table(
+                        item['query'], item['parameters'], parts[-2]
+                    )
                     return _response(
                         200, {'Documents': _items}
                     )
@@ -123,15 +107,13 @@ def mock_cosmos(table_keys, db=None):
 
         return _response(404)
 
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            for method in ['GET', 'POST', 'DELETE', 'PUT']:
-                responses.add_callback(
-                    getattr(responses, method),
-                    re.compile(r'^https://.*.documents.azure.(com|cn).*'),
-                    _callback
-                )
-        return wrapper
-
-    return decorator
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        for method in ['GET', 'POST', 'DELETE', 'PUT']:
+            responses.add_callback(
+                getattr(responses, method),
+                re.compile(r'^https://.*.documents.azure.(com|cn).*'),
+                _callback
+            )
+        return f(*args, **kwargs)
+    return decorated

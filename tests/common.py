@@ -1,4 +1,3 @@
-import json
 import typing as t
 
 import boto3  # type: ignore
@@ -36,40 +35,7 @@ def items(hks=None, rks=None):
     return _items
 
 
-def create_table(name, hks=None, rks=None, _db=None):
-
-    # sqlite3 backend for query_sql()
-    if _db is not None:
-        di = item(hks[0], rks[0] if rks else None)
-        cols = ', '.join([
-            k + ' ' + (
-                'INTEGER' if isinstance(v, int)
-                else 'REAL' if isinstance(v, float)
-                else 'TEXT'
-            )
-            for k, v in di.items()
-        ])
-        sql = f'CREATE TABLE IF NOT EXISTS {name} ({cols});'
-        _db.cursor().execute(sql)
-        _db.cursor().execute(f'DELETE FROM {name};')
-        _db.commit()
-
-        if hks:
-            _items = items(hks, rks)
-            for _item in _items:
-                cols = ', '.join(di.keys())
-                placeholders = ', '.join(['?' for _ in di.keys()])
-                vals = [
-                    json.dumps(val) if type(val) in [dict, list]
-                    else val
-                    for val in _item.values()
-                ]
-                sql = f'INSERT INTO {name}({cols}) VALUES ({placeholders});'
-                _db.cursor().execute(sql, tuple(vals))
-
-        return
-
-    # dynamodb backend
+def create_table(name, hks=None, rks=None):
     dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
     key_schema = [
         {'AttributeName': 'hk', 'KeyType': 'HASH'}
@@ -120,7 +86,6 @@ def test_get_item_hook(config=None):
 
         @hookimpl
         def get_item_post(self, table: str, item: t.Dict) -> t.Dict:
-            print(f'{table}.get_item_post({item})')
             return {'foo': 'bar'}
 
     pm = plugin.get_pm('table')
@@ -154,9 +119,9 @@ def test_delete_item(config=None):
     assert tb.get_item(hk='1', rk='a') is None
 
 
-def test_query(config=None, db=None):
+def test_query(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range', ['1', '2'], ['a', 'b'], db)
+    create_table('hash_range', ['1', '2'], ['a', 'b'])
     response = tb.query(
         {'hk': '1'},
         {'rk': 'a'}
@@ -167,8 +132,8 @@ def test_query(config=None, db=None):
     }
 
 
-def test_query_sql(config=None, db=None):
-    create_table('hash_range', ['1', '2'], ['a', 'b'], db)
+def test_query_sql(config=None):
+    create_table('hash_range', ['1', '2'], ['a', 'b'])
     tb = table('hash_range', config)
     response = tb.query_sql(
         'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',

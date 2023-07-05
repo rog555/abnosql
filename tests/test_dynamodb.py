@@ -1,12 +1,9 @@
 import os
-import sqlite3
 
 from moto import mock_dynamodb2  # type: ignore
 
 from nosql.mocks import mock_dynamodbx
 from tests import common as cmn
-
-DB = sqlite3.connect(':memory:')
 
 
 def setup_dynamodb():
@@ -49,7 +46,8 @@ def test_query():
     cmn.test_query()
 
 
-@mock_dynamodbx(db=DB)
+@mock_dynamodbx
+@mock_dynamodb2
 def test_query_sql():
     setup_dynamodb()
-    cmn.test_query_sql(db=DB)
+    cmn.test_query_sql()
