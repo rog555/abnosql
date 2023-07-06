@@ -10,7 +10,7 @@ install-pre-commit:
 	pre-commit install
 
 test:
-	pytest --cov=abnosql tests/ --cov-report=xml --cov-report html:/tmp/htmlcov
+	pytest --cov=abnosql --cov-report=xml --cov-report html:/tmp/htmlcov
 
 style:
 	pre-commit run --all-files
