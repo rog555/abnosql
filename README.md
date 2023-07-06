@@ -9,6 +9,8 @@ This library is not intended to create databases/tables, use Terraform/ARM/Cloud
 
 Why not just 'nosql' or 'pynosql'? because they already exist on pypi :-)
 
+[![tests](https://github.com/rog555/abnosql/actions/workflows/python-package.yml/badge.svg)](https://github.com/rog555/abnosql/actions/workflows/python-package.yml)[![codecov](https://codecov.io/gh/rog555/abnosql/branch/main/graph/badge.svg?token=9gTkGPgASh)](https://codecov.io/gh/rog555/abnosql)
+
 - [NoSQL Abstraction Library](#nosql-abstraction-library)
   - [Installation](#installation)
   - [Example Usage](#example-usage)
