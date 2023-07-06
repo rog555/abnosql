@@ -1,6 +1,7 @@
 from datetime import datetime
 import functools
 import json
+import os
 import typing as t
 
 from boto3.dynamodb.types import Binary  # type: ignore
@@ -17,6 +18,8 @@ from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
+
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 try:
     import boto3  # type: ignore
@@ -133,7 +136,11 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
-        self.session = self.config.get('session', boto3.session.Session())
+        self.session = self.config.get(
+            'session', boto3.session.Session(
+                region_name=AWS_REGION
+            )
+        )
         self.table = self.session.resource('dynamodb').Table(name)
 
     @dynamodb_ex_handler()
