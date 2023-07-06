@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import os
-import re
 from setuptools import find_packages  # type: ignore
 from setuptools import setup
 
@@ -9,22 +8,16 @@ PACKAGE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
 def read(*args):
-    """Reads complete file contents."""
     return open(os.path.join(PACKAGE_DIR, *args)).read()
 
 
 def get_version():
-    """Reads the version from this module."""
-    init = read('abnosql', '__init__.py')
-    return re.compile(
-        r"""__version__ = ['"]([0-9.]+)['"]"""
-    ).search(init).group(1)
-
-
-def get_requirements():
-    """Reads the requirements file."""
-    requirements = read("requirements.txt")
-    return list(requirements.strip().splitlines())
+    line = read('abnosql', 'version.py').splitlines()[0].strip()
+    parts = line.split(' ')
+    assert len(parts) == 3
+    assert parts[0] == '__version__'
+    assert parts[1] == '='
+    return parts[2].strip('\'"')
 
 
 __version__ = get_version()
