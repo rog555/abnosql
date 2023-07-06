@@ -1,10 +1,9 @@
 import typing as t
 
-import boto3  # type: ignore
 import pluggy  # type: ignore
 
-from nosql import plugin
-from nosql import table
+from abnosql import plugin
+from abnosql import table
 
 
 def item(hk, rk=None):
@@ -35,49 +34,20 @@ def items(hks=None, rks=None):
     return _items
 
 
-def create_table(name, hks=None, rks=None):
-    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-    key_schema = [
-        {'AttributeName': 'hk', 'KeyType': 'HASH'}
-    ]
-    attr_defs = [
-        {'AttributeName': 'hk', 'AttributeType': 'S'}
-    ]
-    if rks is not None:
-        key_schema.append({'AttributeName': 'rk', 'KeyType': 'RANGE'})
-        attr_defs.append({'AttributeName': 'rk', 'AttributeType': 'S'})
-    params = {
-        'TableName': name,
-        'KeySchema': key_schema,
-        'AttributeDefinitions': attr_defs,
-        'ProvisionedThroughput': {
-            'ReadCapacityUnits': 10,
-            'WriteCapacityUnits': 10
-        }
-    }
-    dynamodb.create_table(**params)
-    _table = dynamodb.Table(name)
-    if hks:
-        _items = items(hks, rks)
-        for _item in _items:
-            _table.put_item(Item=_item)
-
-
 def test_get_item(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range', ['1', '2'], ['a', 'b'])
+    assert tb.get_item(hk='1', rk='a') is None
+    tb.put_item(item('1', 'a'))
     assert tb.get_item(hk='1', rk='a') == item('1', 'a')
-    assert tb.get_item(hk='3', rk='a') is None
 
-    create_table('hash_only', ['1', '2'])
     tb = table('hash_only', config)
+    assert tb.get_item(hk='1') is None
+    tb.put_item(item('1'))
     assert tb.get_item(hk='1') == item('1')
-    assert tb.get_item(hk='3') is None
 
 
 def test_put_item(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range')
     assert tb.get_item(hk='1', rk='a') is None
     tb.put_item(item('1', 'a'))
     assert tb.get_item(hk='1', rk='a') == item('1', 'a')
@@ -85,13 +55,12 @@ def test_put_item(config=None):
 
 def test_put_items(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range')
     tb.put_items(items(['1', '2'], ['a', 'b']))
+    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
 
 
 def test_delete_item(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range')
     tb.put_item(item('1', 'a'))
     assert tb.get_item(hk='1', rk='a') == item('1', 'a')
     tb.delete_item(hk='1', rk='a')
@@ -99,8 +68,7 @@ def test_delete_item(config=None):
 
 
 def test_hooks(config=None):
-    create_table('hash_range', ['1', '2'], ['a', 'b'])
-    hookimpl = pluggy.HookimplMarker('nosql.table')
+    hookimpl = pluggy.HookimplMarker('abnosql.table')
 
     class TableHooks:
 
@@ -112,7 +80,7 @@ def test_hooks(config=None):
         def set_config(self, table: str) -> t.Dict:
             self.called['set_config'] = True
             assert self.table == table
-            return {'a': 'b'}
+            return {'a': 'b', 'key_attrs': ['hk', 'rk']}
 
         @hookimpl
         def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # noqa E501
@@ -142,13 +110,13 @@ def test_hooks(config=None):
     tb = table('hash_range')
 
     assert 'set_config' in hooks.called
-    assert tb.config == {'a': 'b'}
-
-    assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
-    assert 'get_item_post' in hooks.called
+    assert tb.config == {'a': 'b', 'key_attrs': ['hk', 'rk']}
 
     tb.put_item(item('1', 'a'))
     assert 'put_item_post' in hooks.called
+
+    assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
+    assert 'get_item_post' in hooks.called
 
     tb.put_items(items(['1', '2'], ['a', 'b']))
     assert 'put_items_post' in hooks.called
@@ -161,7 +129,7 @@ def test_hooks(config=None):
 
 def test_query(config=None):
     tb = table('hash_range', config)
-    create_table('hash_range', ['1', '2'], ['a', 'b'])
+    tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query(
         {'hk': '1'},
         {'rk': 'a'}
@@ -173,8 +141,8 @@ def test_query(config=None):
 
 
 def test_query_sql(config=None):
-    create_table('hash_range', ['1', '2'], ['a', 'b'])
     tb = table('hash_range', config)
+    tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query_sql(
         'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
         {'@hk': '1', '@num': 4}

@@ -15,7 +15,7 @@ def read(*args):
 
 def get_version():
     """Reads the version from this module."""
-    init = read('nosql', '__init__.py')
+    init = read('abnosql', '__init__.py')
     return re.compile(
         r"""__version__ = ['"]([0-9.]+)['"]"""
     ).search(init).group(1)
@@ -31,16 +31,19 @@ __version__ = get_version()
 
 
 base_deps = [
-    'boto3',
     'click',
-    'dynamodb_json',
     'pluggy',
     'sqlglot',
-    'sqlparse',
     'tabulate'
 ]
-azure_deps = ['azure-cosmos']
-all_deps = base_deps + azure_deps
+dynamodb_deps = [
+    'boto3',
+    'dynamodb_json'
+]
+cosmos_deps = [
+    'azure-cosmos'
+]
+all_deps = base_deps + dynamodb_deps + cosmos_deps
 tests_require = all_deps + [
     'moto',
     'responses',
@@ -49,7 +52,7 @@ tests_require = all_deps + [
 
 
 setup(
-    name='nosql',
+    name='abnosql',
     version=__version__,
     description='NoSQL Abstraction Library',
     long_description=read('README.md'),
@@ -59,8 +62,8 @@ setup(
     maintainer='Roger Foskett',
     maintainer_email='r_foskett@hotmail.com',
 
-    url='https://github.com/rog555/nosql',
-    download_url='http://pypi.python.org/pypi/nosql',
+    url='https://github.com/rog555/abnosql',
+    download_url='http://pypi.python.org/pypi/abnosql',
     keywords='nosql, azure cosmos, aws dynamodb',
 
     license='MIT',
@@ -70,7 +73,8 @@ setup(
     tests_require=tests_require,
     extras_require={
         'test': tests_require,
-        'azure': azure_deps,
+        'dynamodb': dynamodb_deps,
+        'cosmos': cosmos_deps
     },
     python_requires='>=3.8,<4.0',
     test_suite='tests',
@@ -89,7 +93,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'nosql = nosql:cli',
+            'abnosql = abnosql:cli',
         ]
     }
 )

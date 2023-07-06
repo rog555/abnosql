@@ -4,4 +4,4 @@ exclude_lines =
     pass
 
 [run]
-omit = nosql/cli.py
+omit = abnosql/cli.py

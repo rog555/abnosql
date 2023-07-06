@@ -4,14 +4,13 @@ import typing as t
 
 import pluggy  # type: ignore
 
-import nosql.exceptions as ex
-from nosql.plugin import PM
-from nosql.table import get_sql_params
-from nosql.table import TableBase
-from nosql.table import validate_query_attrs
-from nosql.table import validate_statement
+import abnosql.exceptions as ex
+from abnosql.plugin import PM
+from abnosql.table import get_sql_params
+from abnosql.table import TableBase
+from abnosql.table import validate_query_attrs
 
-hookimpl = pluggy.HookimplMarker('nosql.table')
+hookimpl = pluggy.HookimplMarker('abnosql.table')
 
 try:
     from azure.cosmos import CosmosClient  # type: ignore
@@ -91,7 +90,7 @@ class Table(TableBase):
         required = ['endpoint', 'credential', 'database']
         for attr in ['account'] + required:
             cf[attr] = self.config.get(
-                attr, os.environ.get('NOSQL_COSMOS_' + attr.upper())
+                attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
             )
         if cf['endpoint'] is None and cf['account'] is not None:
             cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
@@ -176,7 +175,6 @@ class Table(TableBase):
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        validate_statement(statement)
         parameters = parameters or {}
 
         def _get_param(var, val):

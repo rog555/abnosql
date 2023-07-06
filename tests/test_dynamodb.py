@@ -1,13 +1,39 @@
 import os
 
+import boto3  # type: ignore
 from moto import mock_dynamodb2  # type: ignore
 
-from nosql.mocks import mock_dynamodbx
+from abnosql.mocks import mock_dynamodbx
 from tests import common as cmn
 
 
+def create_table(name, rk=True):
+    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    key_schema = [
+        {'AttributeName': 'hk', 'KeyType': 'HASH'}
+    ]
+    attr_defs = [
+        {'AttributeName': 'hk', 'AttributeType': 'S'}
+    ]
+    if rk is True:
+        key_schema.append({'AttributeName': 'rk', 'KeyType': 'RANGE'})
+        attr_defs.append({'AttributeName': 'rk', 'AttributeType': 'S'})
+    params = {
+        'TableName': name,
+        'KeySchema': key_schema,
+        'AttributeDefinitions': attr_defs,
+        'ProvisionedThroughput': {
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        }
+    }
+    dynamodb.create_table(**params)
+
+
 def setup_dynamodb():
-    os.environ['NOSQL_DB'] = 'dynamodb'
+    os.environ['ABNOSQL_DB'] = 'dynamodb'
+    create_table('hash_range', True)
+    create_table('hash_only', False)
 
 
 @mock_dynamodb2

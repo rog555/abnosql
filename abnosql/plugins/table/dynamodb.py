@@ -1,21 +1,22 @@
+from datetime import datetime
 import functools
 import json
 import typing as t
 
+from boto3.dynamodb.types import Binary  # type: ignore
+from boto3.dynamodb.types import Decimal  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from botocore.exceptions import NoCredentialsError  # type: ignore
 from dynamodb_json import json_util  # type: ignore
 import pluggy  # type: ignore
 
-import nosql.exceptions as ex
-from nosql.plugin import PM
-from nosql.table import deserialize
-from nosql.table import get_sql_params
-from nosql.table import TableBase
-from nosql.table import validate_query_attrs
-from nosql.table import validate_statement
+import abnosql.exceptions as ex
+from abnosql.plugin import PM
+from abnosql.table import get_sql_params
+from abnosql.table import TableBase
+from abnosql.table import validate_query_attrs
 
-hookimpl = pluggy.HookimplMarker('nosql.table')
+hookimpl = pluggy.HookimplMarker('abnosql.table')
 
 try:
     import boto3  # type: ignore
@@ -23,6 +24,28 @@ try:
     # import botocore.exceptions
 except ImportError:
     MISSING_DEPS = True
+
+
+# http://stackoverflow.com/questions/11875770/how-to-overcome-datetime-datetime-not-json-serializable-in-python  # noqa
+# see https://github.com/Alonreznik/dynamodb-json/blob/master/dynamodb_json/json_util.py  # noqa
+def json_serial(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj) if obj != obj.to_integral_value() else int(obj)
+    if isinstance(obj, Binary):
+        return obj.value
+    if isinstance(obj, set):
+        return list(obj)
+    raise TypeError('type not serializable')
+
+
+def deserialize(obj, deserializer=None):
+    if deserializer is None:
+        deserializer = json_serial
+    elif callable(deserializer):
+        return deserializer(obj)
+    return json.loads(json.dumps(obj, default=deserializer))
 
 
 def get_key(**kwargs):
@@ -181,7 +204,6 @@ class Table(TableBase):
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        validate_statement(statement)
         parameters = parameters or {}
         (statement, params) = get_sql_params(
             statement, parameters, serialize_dynamodb_type, '?'

@@ -1,25 +1,27 @@
 import functools
 import json
 import re
+import typing as t
 from urllib import parse as urlparse
 
-import boto3  # type: ignore
 import responses  # type: ignore
 
-from nosql.mocks import query_table
-from nosql.table import deserialize
+from abnosql import table
+
+
+KEY_ATTRS: t.Dict[str, t.List[str]] = {}
+
+
+def set_keyattrs(key_attrs: t.Dict[str, t.List[str]]):
+    global KEY_ATTRS
+    KEY_ATTRS = key_attrs
 
 
 def mock_cosmos(f):
 
-    def _get_key(headers, _table, doc_id):
-        hk = None
-        rk = None
-        for kd in _table.key_schema:
-            if kd['KeyType'] == 'HASH':
-                hk = kd['AttributeName']
-            else:
-                rk = kd['AttributeName']
+    def _get_key(headers, key_attrs, doc_id):
+        hk = key_attrs[0]
+        rk = key_attrs[1] if len(key_attrs) > 1 else None
         _part_keys = headers.get('x-ms-documentdb-partitionkey')
         if isinstance(_part_keys, str) and len(_part_keys) > 0:
             _part_val = json.loads(_part_keys)[0]
@@ -65,20 +67,27 @@ def mock_cosmos(f):
             return _response(404)
 
         table_name = parts[3]
+        global KEY_ATTRS
+        key_attrs = KEY_ATTRS.get(table_name)
+        if key_attrs is None:
+            return _response(404)
 
-        # use moto dynamodb to mock cosmos :-/
-        _table = boto3.resource('dynamodb').Table(table_name)
+        # use memory table to mock cosmos
+        tb = table(
+            table_name,
+            config={'key_attrs': key_attrs},
+            database='memory'
+        )
 
         # /dbs/{database}/colls/{table}/docs/{docid}
         if len(parts) == 6 and parts[-2] == 'docs':
-            key = _get_key(headers, _table, parts[-1])
+            key = _get_key(headers, key_attrs, parts[-1])
             if request.method == 'GET':
-                response = _table.get_item(Key=key)
-                _item = deserialize(response).get('Item')
-                if _item is not None:
-                    return _response(200, _item)
+                item = tb.get_item(**key)
+                if item is not None:
+                    return _response(200, item)
             elif request.method == 'DELETE':
-                _table.delete_item(Key=key)
+                tb.delete_item(**key)
                 return _response(204, None)
 
         # /dbs/{database}/colls/{table}/docs
@@ -89,14 +98,15 @@ def mock_cosmos(f):
                 if is_query is True:
                     # TODO(x-ms-continuation)
                     # {'initial_headers': {'x-ms-continuation': 'sometoken'}}
-                    _items = query_table(
-                        item['query'], item['parameters'], parts[-2]
+                    items = tb.query_sql(
+                        item['query'],
+                        {_['name']: _['value'] for _ in item['parameters']}
                     )
                     return _response(
-                        200, {'Documents': _items}
+                        200, {'Documents': items}
                     )
                 else:
-                    _table.put_item(Item=item)
+                    tb.put_item(item)
                 return _response(201, None)
 
         # upsert_item() reads the collection

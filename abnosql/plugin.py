@@ -6,12 +6,12 @@ import typing as t
 
 import pluggy  # type: ignore
 
-from nosql.exceptions import PluginException
+from abnosql.exceptions import PluginException
 
 
 PKG_ROOT = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = os.path.basename(PKG_ROOT)
-_PMS = None  # type: ignore
+_PMS = {}  # type: ignore
 
 
 class PluginSpec:

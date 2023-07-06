@@ -1,6 +1,6 @@
 import logging
 
-from nosql.table import table
+from abnosql.table import table
 
 __version__ = '0.0.1'
 

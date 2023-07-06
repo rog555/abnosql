@@ -1,21 +1,16 @@
 from abc import ABCMeta  # type: ignore
 from abc import abstractmethod
-from datetime import datetime
-import json
 import os
 import re
 import typing as t
 
-from boto3.dynamodb.types import Binary  # type: ignore
-from boto3.dynamodb.types import Decimal  # type: ignore
 import pluggy  # type: ignore
-import sqlparse  # type: ignore
 
-import nosql.exceptions as ex
-from nosql import plugin
+import abnosql.exceptions as ex
+from abnosql import plugin
 
-hookimpl = pluggy.HookimplMarker('nosql.table')
-hookspec = pluggy.HookspecMarker('nosql.table')
+hookimpl = pluggy.HookimplMarker('abnosql.table')
+hookspec = pluggy.HookspecMarker('abnosql.table')
 
 
 class TableSpecs(plugin.PluginSpec):
@@ -92,6 +87,7 @@ def get_sql_params(
     replace: t.Optional[str] = None
 ) -> t.Tuple[str, t.List]:
     # convert @variable to dynamodb ? placeholders
+    validate_statement(statement)
     vars = list(re.findall(r'\@[a-zA-Z0-9_.-]+', statement))
     params = []
     _missing = {}
@@ -115,34 +111,12 @@ def get_sql_params(
     return (statement, params)
 
 
-# http://stackoverflow.com/questions/11875770/how-to-overcome-datetime-datetime-not-json-serializable-in-python  # noqa
-# see https://github.com/Alonreznik/dynamodb-json/blob/master/dynamodb_json/json_util.py  # noqa
-def json_serial(obj):
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    if isinstance(obj, Decimal):
-        return float(obj) if obj != obj.to_integral_value() else int(obj)
-    if isinstance(obj, Binary):
-        return obj.value
-    if isinstance(obj, set):
-        return list(obj)
-    raise TypeError('type not serializable')
-
-
 def quote_str(str):
     return "'" + str.translate(
         str.maketrans({
             "'": "\\'"
         })
     ) + "'"
-
-
-def deserialize(obj, deserializer=None):
-    if deserializer is None:
-        deserializer = json_serial
-    elif callable(deserializer):
-        return deserializer(obj)
-    return json.loads(json.dumps(obj, default=deserializer))
 
 
 def validate_query_attrs(key: t.Dict, filters: t.Dict):
@@ -161,34 +135,19 @@ def validate_query_attrs(key: t.Dict, filters: t.Dict):
 
 
 def validate_statement(statement: str):
-    parsed = sqlparse.parse(statement)[0]
-
-    def _extract_non_select_tokens(tokens):
-        invalid_tokens = []
-        for token in tokens:
-            name = token.value.upper()
-            if token.is_group:
-                invalid_tokens.extend(_extract_non_select_tokens(token))
-            elif token.ttype is sqlparse.tokens.DML and name != 'SELECT':
-                invalid_tokens.append(name)
-            elif token.ttype is sqlparse.tokens.DDL:
-                invalid_tokens.append(name)
-        return invalid_tokens
-
-    # validate that SELECT is only specified
-    invalid_tokens = _extract_non_select_tokens(parsed.tokens)
-    invalid_tokens = sorted(set(invalid_tokens))
-    if len(invalid_tokens) > 0:
-        raise ex.ValidationException('only SELECT is allowed')
+    # sqlglot can do this (and sqlparse), but lets keep it simple
+    tokens = [_.strip() for _ in statement.split(' ') if _.strip() != '']
+    if len(tokens) == 0 or tokens[0].upper() != 'SELECT':
+        raise ex.ValidationException('statement must start with SELECT')
 
 
 def table(
-    name: str, config:
-    t.Optional[dict] = None,
+    name: str,
+    config: t.Optional[dict] = None,
     database: t.Optional[str] = None
 ) -> TableBase:
     if database is None:
-        database = os.environ.get('NOSQL_DB')
+        database = os.environ.get('ABNOSQL_DB')
     pm = plugin.get_pm('table')
     module = pm.get_plugin(database)
     if module is None:

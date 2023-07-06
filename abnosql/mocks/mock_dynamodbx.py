@@ -2,10 +2,13 @@ import functools
 import json
 from unittest.mock import patch
 
+import boto3  # type: ignore
 import botocore  # type: ignore
 from dynamodb_json import json_util  # type: ignore
 
-from nosql.mocks import query_table
+from abnosql.plugins.table.dynamodb import deserialize
+from abnosql.plugins.table.memory import get_table_name
+from abnosql.plugins.table.memory import query_items
 
 ORIG_MAKE_API_CALL = botocore.client.BaseClient._make_api_call
 
@@ -14,8 +17,15 @@ def mock_dynamodbx(f):
 
     # won't need this when moto supports ExecuteStatement
     def execute_statement(kwargs):
+        table_name = get_table_name(kwargs['Statement'])
+        table = boto3.resource('dynamodb').Table(table_name)
+        all_items = deserialize(table.scan()['Items'])
         items = []
-        _items = query_table(kwargs['Statement'], kwargs.get('Parameters'))
+        _items = query_items(
+            kwargs['Statement'],
+            all_items,
+            kwargs.get('Parameters')
+        )
         for item in _items:
             items.append(json.loads(json_util.dumps(item)))
         return {

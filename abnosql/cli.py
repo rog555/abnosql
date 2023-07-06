@@ -5,7 +5,7 @@ import os
 import click
 from tabulate import tabulate  # type: ignore
 
-from nosql import table as _table
+from abnosql import table as _table
 
 
 def dump(obj):
@@ -56,7 +56,7 @@ def get_obj(argname, _obj, file_only=False):
 
 
 def get_config(obj):
-    config_file = os.environ.get('NOSQL_CONFIG')
+    config_file = os.environ.get('ABNOSQL_CONFIG')
     if obj is None:
         if config_file is not None and os.path.isfile(config_file):
             obj = config_file

@@ -1,23 +1,28 @@
 from base64 import b64encode
 import os
 
-from moto import mock_dynamodb2  # type: ignore
 import responses  # type: ignore
 
-from nosql.mocks import mock_cosmos
+from abnosql.mocks import mock_cosmos
+from abnosql.mocks.mock_cosmos import set_keyattrs
+from abnosql.plugins.table.memory import clear_tables
 from tests import common as cmn
 
 
 def setup_cosmos():
-    os.environ['NOSQL_DB'] = 'cosmos'
-    os.environ['NOSQL_COSMOS_ACCOUNT'] = 'foo'
-    os.environ['NOSQL_COSMOS_CREDENTIAL'] = b64encode(
+    clear_tables()
+    set_keyattrs({
+        'hash_range': ['hk', 'rk'],
+        'hash_only': ['hk']
+    })
+    os.environ['ABNOSQL_DB'] = 'cosmos'
+    os.environ['ABNOSQL_COSMOS_ACCOUNT'] = 'foo'
+    os.environ['ABNOSQL_COSMOS_CREDENTIAL'] = b64encode(
         'mycredential'.encode('utf-8')
     ).decode()
-    os.environ['NOSQL_COSMOS_DATABASE'] = 'bar'
+    os.environ['ABNOSQL_COSMOS_DATABASE'] = 'bar'
 
 
-@mock_dynamodb2
 @mock_cosmos
 @responses.activate
 def test_get_item():
@@ -26,7 +31,6 @@ def test_get_item():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_put_item():
     setup_cosmos()
@@ -34,7 +38,6 @@ def test_put_item():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_put_items():
     setup_cosmos()
@@ -42,7 +45,6 @@ def test_put_items():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_delete_item():
     setup_cosmos()
@@ -50,7 +52,6 @@ def test_delete_item():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_hooks():
     setup_cosmos()
@@ -58,7 +59,6 @@ def test_hooks():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_query():
     setup_cosmos()
@@ -66,7 +66,6 @@ def test_query():
 
 
 @mock_cosmos
-@mock_dynamodb2
 @responses.activate
 def test_query_sql():
     setup_cosmos()
