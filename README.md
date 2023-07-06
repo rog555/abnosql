@@ -19,6 +19,7 @@ Why not just 'nosql' or 'pynosql'? because they already exist on pypi :-)
 - [Testing](#testing)
   - [AWS DynamoDB](#aws-dynamodb-1)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql-1)
+- [CLI](#cli)
 
 
 ## Installation
@@ -165,3 +166,33 @@ def test_something():
 ```
 
 More examples in [tests/test_cosmos.py](./tests/test_cosmos.py)
+
+# CLI
+
+Small abnosql CLI installed with few of the commands above
+
+```
+Usage: abnosql [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  delete-item
+  get-item
+  put-item
+  put-items
+  query
+  query-sql
+```
+
+Example querying table in Azure Cosmos, with cosmos.json config file containing endpoint, credential and database
+
+```
+$ abnosql query-sql mytable 'SELECT * FROM myable' -d cosmos -c cosmos.json
+partkey      id      num  obj                                          list       str
+-----------  ----  -----  -------------------------------------------  ---------  -----
+p1           p1.1      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]  str
+p2           p2.1      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]  str
+p2           p2.2      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]  str
+```
