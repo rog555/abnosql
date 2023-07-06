@@ -49,7 +49,9 @@ tests_require = all_deps + [
     'responses',
     'pytest'
 ]
-
+dev_require = tests_require + [
+    'pre-commit'
+]
 
 setup(
     name='abnosql',
@@ -72,6 +74,7 @@ setup(
 
     tests_require=tests_require,
     extras_require={
+        'dev': dev_require,
         'test': tests_require,
         'dynamodb': dynamodb_deps,
         'cosmos': cosmos_deps

@@ -10,12 +10,12 @@ install-pre-commit:
 	pre-commit install
 
 test:
-	python -m unittest
+	pytest --cov=abnosql tests/ --cov-report html:/tmp/htmlcov --cov-fail-under 80
 
-unit:
-	SKIP_INTEGRATION=1 python -m unittest
+lint:
+	flake8 .
 
 style:
 	pre-commit run --all-files
 
-check: style test
+check: lint style test
