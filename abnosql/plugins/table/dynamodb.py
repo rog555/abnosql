@@ -19,7 +19,7 @@ from abnosql.table import validate_query_attrs
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
 
-AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+AWS_DEFAULT_REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 
 try:
     import boto3  # type: ignore
@@ -138,7 +138,7 @@ class Table(TableBase):
         self.set_config(config)
         self.session = self.config.get(
             'session', boto3.session.Session(
-                region_name=AWS_REGION
+                region_name=AWS_DEFAULT_REGION
             )
         )
         self.table = self.session.resource('dynamodb').Table(name)
