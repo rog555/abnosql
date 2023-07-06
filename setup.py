@@ -45,9 +45,11 @@ cosmos_deps = [
 ]
 all_deps = base_deps + dynamodb_deps + cosmos_deps
 tests_require = all_deps + [
+    'coverage',
     'moto',
     'responses',
-    'pytest'
+    'pytest',
+    'pytest-cov',
 ]
 dev_require = tests_require + [
     'pre-commit'
