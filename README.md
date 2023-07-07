@@ -73,7 +73,7 @@ assert tb.query({'hk': '1'})['items'] == [item]
 # be careful not to use cloud specific statements!
 assert tb.query_sql(
     'SELECT * FROM mytable WHERE hk = @hk AND num > @num',
-    {'@hk': '1'}
+    {'@hk': '1', '@num': 5}
 )['items'] == [item]
 
 tb.delete_item({'hk': '1', 'rk': 'a'})
@@ -102,7 +102,6 @@ Beyond partition and range keys defined on the table, indexes are not currently 
 
 A few methods such as `get_item()`, `delete_item()` and `query()` need to know partition/hash keys as defined on the table.  To avoid having to configure this or lookup from the provider, the convention used is that the first kwarg or dictionary item is the partition key, and if supplied the 2nd is the range/sort key.
 
-- 
 
 # Configuration
 
