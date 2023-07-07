@@ -2,8 +2,8 @@
 
 Basic CRUD and query support for NoSQL databases, allowing for portable cloud native applications
 
-- AWS DynamoDB
-- Azure Cosmos NoSQL
+- AWS DynamoDB <img height="15" width="15" src="https://unpkg.com/simple-icons@v9/icons/amazondynamodb.svg" />
+- Azure Cosmos NoSQL <img height="15" width="15" src="https://unpkg.com/simple-icons@v9/icons/microsoftazure.svg" />
 
 This library is not intended to create databases/tables, use Terraform/ARM/CloudFormation etc for that
 
@@ -13,7 +13,8 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
 
 - [NoSQL Abstraction Library](#nosql-abstraction-library)
   - [Installation](#installation)
-  - [Example Usage](#example-usage)
+- [Usage](#usage)
+  - [API Docs](#api-docs)
   - [Querying](#querying)
   - [Indexes](#indexes)
   - [Partition Keys](#partition-keys)
@@ -38,7 +39,7 @@ pip install abnosql[cosmos]
 By default, abnosql does not include database depedendencies.  This is to facilitate packaging
 abnosql into AWS Lambda or Azure Functions (for example), without over-bloating the packages
 
-## Example Usage
+# Usage
 
 ```
 from abnosql import table
@@ -77,6 +78,10 @@ assert tb.query_sql(
 
 tb.delete_item({'hk': '1', 'rk': 'a'})
 ```
+
+## API Docs
+
+See [API Docs](https://rog555.github.io/abnosql/abnosql/table.html)
 
 ## Querying
 
