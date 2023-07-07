@@ -17,22 +17,62 @@ class TableSpecs(plugin.PluginSpec):
 
     @hookspec(firstresult=True)
     def set_config(self, table: str) -> t.Dict:  # type: ignore[empty-body] # noqa E501
+        """Hook to set config
+
+        Args:
+            table: table name
+
+        Returns:
+            dictionary containing config
+
+        """
         pass
 
     @hookspec(firstresult=True)
     def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # type: ignore[empty-body] # noqa E501
+        """Hook invoked after get_item()
+
+        Args:
+            table: table name
+            item: dictionary item retrieved from get_item call
+
+        Returns:
+            dictionary containing updated item
+
+        """
         pass
 
     @hookspec
     def put_item_post(self, table: str, item: t.Dict) -> None:  # type: ignore[empty-body] # noqa E501
+        """Hook invoked after put_item()
+
+        Args:
+            table: table name
+            item: dictionary containing partition and range/sort key
+
+        """
         pass
 
     @hookspec
     def put_items_post(self, table: str, items: t.List[t.Dict]) -> None:  # type: ignore[empty-body] # noqa E501
+        """Hook invoked after put_items()
+
+        Args:
+            table: table name
+            item: list of dictionary items written to table
+
+        """
         pass
 
     @hookspec
     def delete_item_post(self, table: str, key: t.Dict) -> None:  # type: ignore[empty-body] # noqa E501
+        """Hook invoked after delete_item()
+
+        Args:
+            table: table name
+            key: dictionary of item written to table
+
+        """
         pass
 
 
@@ -41,22 +81,56 @@ class TableBase(metaclass=ABCMeta):
     def __init__(
         self, pm: plugin.PM, name: str, config: t.Optional[dict] = None
     ) -> None:
+        """Instantiate table object
+
+        Args:
+            pm: pluggy plugin manager
+            name: table name
+            config: optional config dict dict
+        """
         pass
 
     @abstractmethod
     def get_item(self, **kwargs) -> t.Dict:
+        """Get table/collection item
+
+        Args:
+            partition key and range/sort key (if used)
+
+        Returns:
+            item dictionary or None if not found
+
+        """
         pass
 
     @abstractmethod
     def put_item(self, item: t.Dict):
+        """Puts table/collection item
+
+        Args:
+            item: dictionary
+
+        """
         pass
 
     @abstractmethod
     def put_items(self, items: t.Iterable[t.Dict]):
+        """Puts multiple table/collection items
+
+        Args:
+            items: list of item dictionaries
+
+        """
         pass
 
     @abstractmethod
     def delete_item(self, **kwargs):
+        """Deletes table/collection item
+
+        Args:
+            partition key and range/sort key (if used)
+
+        """
         pass
 
     @abstractmethod
@@ -67,6 +141,18 @@ class TableBase(metaclass=ABCMeta):
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
+        """Perform key based query with optional exact match filters
+
+        Args:
+            key: dictionary containing partition key and range/sort key
+            filters: optional dictionary of key=value to query and filter on
+            limit: query limit
+            next: pagination token
+
+        Returns:
+            dictionary containing 'items' and 'next' pagination token
+
+        """
         pass
 
     @abstractmethod
@@ -77,6 +163,18 @@ class TableBase(metaclass=ABCMeta):
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
+        """Perform key based query with optional exact match filters
+
+        Args:
+            statement: SQL statement to query table
+            parameters: optional dictionary containing @key = value placeholders
+            limit: query limit
+            next: pagination token
+
+        Returns:
+            dictionary containing 'items' and 'next' pagination token
+
+        """
         pass
 
 
