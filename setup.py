@@ -46,6 +46,7 @@ tests_require = all_deps + [
     'responses'
 ]
 dev_require = tests_require + [
+    'pdoc',
     'pre-commit'
 ]
 

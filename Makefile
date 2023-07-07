@@ -16,3 +16,6 @@ style:
 	pre-commit run --all-files
 
 check: style test
+
+docs:
+	pdoc ./abnosql '!abnosql.cli'

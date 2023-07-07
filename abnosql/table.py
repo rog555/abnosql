@@ -20,9 +20,11 @@ class TableSpecs(plugin.PluginSpec):
         """Hook to set config
 
         Args:
+
             table: table name
 
         Returns:
+
             dictionary containing config
 
         """
@@ -33,10 +35,12 @@ class TableSpecs(plugin.PluginSpec):
         """Hook invoked after get_item()
 
         Args:
+
             table: table name
             item: dictionary item retrieved from get_item call
 
         Returns:
+
             dictionary containing updated item
 
         """
@@ -47,6 +51,7 @@ class TableSpecs(plugin.PluginSpec):
         """Hook invoked after put_item()
 
         Args:
+
             table: table name
             item: dictionary containing partition and range/sort key
 
@@ -58,6 +63,7 @@ class TableSpecs(plugin.PluginSpec):
         """Hook invoked after put_items()
 
         Args:
+
             table: table name
             item: list of dictionary items written to table
 
@@ -69,6 +75,7 @@ class TableSpecs(plugin.PluginSpec):
         """Hook invoked after delete_item()
 
         Args:
+
             table: table name
             key: dictionary of item written to table
 
@@ -84,6 +91,7 @@ class TableBase(metaclass=ABCMeta):
         """Instantiate table object
 
         Args:
+
             pm: pluggy plugin manager
             name: table name
             config: optional config dict dict
@@ -95,9 +103,11 @@ class TableBase(metaclass=ABCMeta):
         """Get table/collection item
 
         Args:
+
             partition key and range/sort key (if used)
 
         Returns:
+
             item dictionary or None if not found
 
         """
@@ -108,6 +118,7 @@ class TableBase(metaclass=ABCMeta):
         """Puts table/collection item
 
         Args:
+
             item: dictionary
 
         """
@@ -118,6 +129,7 @@ class TableBase(metaclass=ABCMeta):
         """Puts multiple table/collection items
 
         Args:
+
             items: list of item dictionaries
 
         """
@@ -144,6 +156,7 @@ class TableBase(metaclass=ABCMeta):
         """Perform key based query with optional exact match filters
 
         Args:
+
             key: dictionary containing partition key and range/sort key
             filters: optional dictionary of key=value to query and filter on
             limit: query limit
@@ -166,6 +179,7 @@ class TableBase(metaclass=ABCMeta):
         """Perform key based query with optional exact match filters
 
         Args:
+
             statement: SQL statement to query table
             parameters: optional dictionary containing @key = value placeholders
             limit: query limit
