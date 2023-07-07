@@ -36,7 +36,7 @@ pip install abnosql[dynamodb]
 pip install abnosql[cosmos]
 ```
 
-By default, abnosql does not include database depedendencies.  This is to facilitate packaging
+By default, abnosql does not include database dependencies.  This is to facilitate packaging
 abnosql into AWS Lambda or Azure Functions (for example), without over-bloating the packages
 
 # Usage
