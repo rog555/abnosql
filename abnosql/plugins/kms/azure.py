@@ -6,7 +6,7 @@ import os
 import typing as t
 
 import abnosql.exceptions as ex
-from abnosql.kms import get_key_ids
+from abnosql.kms import get_keys
 from abnosql.kms import KmsBase
 from abnosql.plugin import PM
 
@@ -51,24 +51,16 @@ class Kms(KmsBase):
         self, pm: PM, config: t.Optional[dict] = None
     ) -> None:
         self.pm = pm
-        self.set_config(config)
-        key_ids = self.config.get('key_ids', get_key_ids())
+        self.config = config or {}
+        key_ids = self.config.get('key_ids', get_keys())
         if not isinstance(key_ids, list) or len(key_ids) == 0:
-            raise ex.ConfigException('crypto key_ids required')
+            raise ex.ConfigException('kms key_ids required')
         self.key_id = key_ids[0]
         self.crypto_client = CryptographyClient(
             self.key_id, self.config.get(
                 'credential', DefaultAzureCredential()
             )
         )
-
-    def set_config(self, config: t.Optional[dict]):
-        if config is None:
-            config = {}
-        _config = self.pm.hook.set_config()
-        if _config:
-            config = t.cast(t.Dict, _config)
-        self.config = config
 
     @kms_ex_handler()
     def encrypt(self, plaintext: str, context: t.Dict) -> str:

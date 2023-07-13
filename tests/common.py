@@ -34,16 +34,18 @@ def items(hks=None, rks=None):
     return _items
 
 
-def test_get_item(config=None):
-    tb = table('hash_range', config)
-    assert tb.get_item(hk='1', rk='a') is None
-    tb.put_item(item('1', 'a'))
-    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
+def test_get_item(config=None, tables=None):
+    if tables is None or 'hash_range' in tables:
+        tb = table('hash_range', config)
+        assert tb.get_item(hk='1', rk='a') is None
+        tb.put_item(item('1', 'a'))
+        assert tb.get_item(hk='1', rk='a') == item('1', 'a')
 
-    tb = table('hash_only', config)
-    assert tb.get_item(hk='1') is None
-    tb.put_item(item('1'))
-    assert tb.get_item(hk='1') == item('1')
+    if tables is None or 'hash_only' in tables:
+        tb = table('hash_only', config)
+        assert tb.get_item(hk='1') is None
+        tb.put_item(item('1'))
+        assert tb.get_item(hk='1') == item('1')
 
 
 def test_put_item(config=None):
@@ -127,26 +129,30 @@ def test_hooks(config=None):
     plugin.clear_pms()
 
 
-def test_query(config=None):
+def test_query(config=None, return_response=False):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query(
         {'hk': '1'},
         {'rk': 'a'}
     )
+    if return_response is True:
+        return response
     assert response == {
         'items': items(['1'], ['a']),
         'next': None
     }
 
 
-def test_query_sql(config=None):
+def test_query_sql(config=None, return_response=False):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query_sql(
         'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
         {'@hk': '1', '@num': 4}
     )
+    if return_response is True:
+        return response
     assert response == {
         'items': items(['1'], ['a', 'b']),
         'next': None

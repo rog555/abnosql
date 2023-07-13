@@ -57,6 +57,7 @@ all_deps = (
 test_deps = all_deps + [
     'coverage',
     'moto[dynamodb]',
+    'moto[kms]',
     'mypy',
     'pytest',
     'pytest-cov',

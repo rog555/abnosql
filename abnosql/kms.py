@@ -58,10 +58,10 @@ class KmsBase(metaclass=ABCMeta):
         pass
 
 
-def get_key_ids():
+def get_keys():
     return (
-        os.environ['ABNOSQL_KEY_IDS'].split(',')
-        if 'ABNOSQL_KEY_IDS' in os.environ
+        os.environ['ABNOSQL_KMS_KEYS'].split(',')
+        if 'ABNOSQL_KMS_KEYS' in os.environ
         else None
     )
 

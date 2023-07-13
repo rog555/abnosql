@@ -5,7 +5,7 @@ import os
 import typing as t
 
 import abnosql.exceptions as ex
-from abnosql.kms import get_key_ids
+from abnosql.kms import get_keys
 from abnosql.kms import KmsBase
 from abnosql.plugin import PM
 
@@ -13,9 +13,9 @@ from abnosql.plugin import PM
 try:
     import aws_encryption_sdk  # type: ignore
     from aws_encryption_sdk import CommitmentPolicy  # type: ignore
-    import boto3  # type: ignore
     from botocore.exceptions import ClientError  # type: ignore
     from botocore.exceptions import NoCredentialsError  # type: ignore
+    from botocore.session import Session  # type: ignore
 except ImportError:
     MISSING_DEPS = True
 
@@ -50,15 +50,13 @@ class Kms(KmsBase):
         self, pm: PM, config: t.Optional[dict] = None
     ) -> None:
         self.pm = pm
-        self.set_config(config)
+        self.config = config or {}
         self.session = self.config.get(
-            'session', boto3.session.Session(
-                region_name=AWS_DEFAULT_REGION
-            )
+            'session', Session()
         )
-        self.key_ids = self.config.get('key_ids', get_key_ids())
+        self.key_ids = self.config.get('key_ids', get_keys())
         if not isinstance(self.key_ids, list) or len(self.key_ids) == 0:
-            raise ex.ConfigException('crypto key_ids required')
+            raise ex.ConfigException('kms key_ids required')
         self.client = aws_encryption_sdk.EncryptionSDKClient(
             commitment_policy=CommitmentPolicy.REQUIRE_ENCRYPT_REQUIRE_DECRYPT
         )
@@ -66,14 +64,6 @@ class Kms(KmsBase):
             key_ids=self.key_ids,
             botocore_session=self.session
         )
-
-    def set_config(self, config: t.Optional[dict]):
-        if config is None:
-            config = {}
-        _config = self.pm.hook.set_config()
-        if _config:
-            config = t.cast(t.Dict, _config)
-        self.config = config
 
     @kms_ex_handler()
     def encrypt(self, plaintext: str, context: t.Dict) -> str:

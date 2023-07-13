@@ -256,8 +256,8 @@ def validate_statement(statement: str):
 
 
 def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
-    kcfg = config.get('kms')
-    if kcfg is None:
+    kcfg = config.get('kms', {})
+    if item is None or not kcfg:
         return item
     context = {k: item.get(k) for k in kcfg['key_attrs']}
     # encrypt defined attrs
@@ -265,15 +265,15 @@ def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
         val = item.get(attr)
         if val is None:
             continue
-        if not isinstance(attr, str):
+        if not isinstance(val, str):
             val = json.dumps(val)
         item[attr] = kcfg['pm'].encrypt(val, context)
     return item
 
 
 def kms_decrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
-    kcfg = config.get('kms')
-    if not isinstance(kcfg, dict):
+    kcfg = config.get('kms', {})
+    if item is None or not kcfg:
         return item
     context = {k: item.get(k) for k in kcfg['key_attrs']}
     # decrypt defined attrs
@@ -281,9 +281,12 @@ def kms_decrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
         val = item.get(attr)
         if val is None:
             continue
-        if not isinstance(attr, str):
-            val = json.dumps(val)
-        item[attr] = kcfg['pm'].decrypt(val, context)
+        val = kcfg['pm'].decrypt(val, context)
+        try:
+            val = json.loads(val)
+        except Exception:
+            val = val
+        item[attr] = val
     return item
 
 
@@ -329,10 +332,14 @@ def table(
         _crypto_module = kms(kcfg, provider)
         config['kms']['pm'] = _crypto_module
 
+        if 'session' in config and 'session' not in kcfg:
+            # aws_encryption_sdk uses botocore session
+            config['kms']['session'] = config['session']._session
+
         # check required attrs
         missing = [
             _ for _ in ['attrs', 'key_attrs']
-            if not isinstance(kcfg, list) or len(kcfg[_]) == 0
+            if not isinstance(kcfg[_], list) or len(kcfg[_]) == 0
         ]
         if len(missing):
             raise ex.ConfigException(
