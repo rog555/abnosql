@@ -29,14 +29,29 @@ base_deps = [
     'sqlglot',
     'tabulate'
 ]
-dynamodb_deps = [
+aws_crypto_deps = [
+    'boto3',
+    'aws-encryption-sdk',
+]
+aws_dynamodb_deps = [
     'boto3',
     'dynamodb_json'
 ]
-cosmos_deps = [
+azure_cosmos_deps = [
     'azure-cosmos'
 ]
-all_deps = base_deps + dynamodb_deps + cosmos_deps
+azure_crypto_deps = [
+    'azure-identity',
+    'azure-keyvault-keys',
+    'cryptography'
+]
+all_deps = (
+    base_deps
+    + aws_dynamodb_deps
+    + aws_crypto_deps
+    + azure_cosmos_deps
+    + azure_crypto_deps
+)
 tests_require = all_deps + [
     'coverage',
     'moto[dynamodb]',
@@ -73,8 +88,10 @@ setup(
     extras_require={
         'dev': dev_require,
         'test': tests_require,
-        'dynamodb': dynamodb_deps,
-        'cosmos': cosmos_deps
+        'dynamodb': aws_dynamodb_deps,
+        'cosmos': azure_cosmos_deps,
+        'aws-crypto': aws_crypto_deps,
+        'azure-crypto': azure_crypto_deps
     },
     python_requires='>=3.8,<4.0',
     test_suite='tests',

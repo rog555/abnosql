@@ -4,15 +4,13 @@ import json
 import os
 import typing as t
 
-from boto3.dynamodb.types import Binary  # type: ignore
-from boto3.dynamodb.types import Decimal  # type: ignore
-from botocore.exceptions import ClientError  # type: ignore
-from botocore.exceptions import NoCredentialsError  # type: ignore
-from dynamodb_json import json_util  # type: ignore
 import pluggy  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
+from abnosql.table import crypto_decrypt_item
+from abnosql.table import crypto_encrypt_item
+from abnosql.table import crypto_process_query_items
 from abnosql.table import get_sql_params
 from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
@@ -23,8 +21,11 @@ AWS_DEFAULT_REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 
 try:
     import boto3  # type: ignore
-    # import botocore.client
-    # import botocore.exceptions
+    from boto3.dynamodb.types import Binary  # type: ignore
+    from boto3.dynamodb.types import Decimal  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    from botocore.exceptions import NoCredentialsError  # type: ignore
+    from dynamodb_json import json_util  # type: ignore
 except ImportError:
     MISSING_DEPS = True
 
@@ -162,10 +163,12 @@ class Table(TableBase):
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
+        item = crypto_decrypt_item(self.config, item)
         return item
 
     @dynamodb_ex_handler()
     def put_item(self, item: t.Dict):
+        item = crypto_encrypt_item(self.config, item)
         self.table.put_item(Item=item)
         self.pm.hook.put_item_post(table=self.name, item=item)
 
@@ -198,8 +201,10 @@ class Table(TableBase):
         if limit is not None:
             kwargs['Limit'] = limit
         response = self.table.query(**kwargs)
+        items = response.get('Items', [])
+        items = crypto_process_query_items(self.config, items)
         return {
-            'items': deserialize(response.get('Items', [])),
+            'items': deserialize(items),
             'next': response.get('LastEvaluatedKey')
         }
 
@@ -229,6 +234,7 @@ class Table(TableBase):
         response = client.execute_statement(**kwargs)
         items = []
         _items = response.get('Items', [])
+        _items = crypto_process_query_items(self.config, _items)
         for item in _items:
             items.append(json_util.loads(json.dumps(item)))
 

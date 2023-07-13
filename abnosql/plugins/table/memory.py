@@ -8,6 +8,9 @@ from sqlglot.executor import execute  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
+from abnosql.table import crypto_decrypt_item
+from abnosql.table import crypto_encrypt_item
+from abnosql.table import crypto_process_query_items
 from abnosql.table import get_sql_params
 from abnosql.table import quote_str
 from abnosql.table import TableBase
@@ -142,11 +145,13 @@ class Table(TableBase):
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
+        item = crypto_decrypt_item(self.config, item)
         return item
 
     @memory_ex_handler()
     def put_item(self, item: t.Dict):
         key = ':'.join([item[_] for _ in self.key_attrs])
+        item = crypto_encrypt_item(self.config, item)
         if self.items:
             self.items[key] = item
         else:
@@ -196,6 +201,7 @@ class Table(TableBase):
             statement += f' {op} {self.name}.{param[1:]} = {param}'
             op = 'AND'
         items = self.query_sql(statement)
+        items = crypto_process_query_items(self.config, items)
         return {
             'items': items,
             'next': None
@@ -223,4 +229,6 @@ class Table(TableBase):
         else:
             global TABLES
             items = list(TABLES.get(self.name, {}).values())
-        return query_items(statement, items, params, self.name)
+        items = query_items(statement, items, params, self.name)
+        items = crypto_process_query_items(self.config, items)
+        return items

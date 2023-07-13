@@ -6,6 +6,9 @@ import pluggy  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
+from abnosql.table import crypto_decrypt_item
+from abnosql.table import crypto_encrypt_item
+from abnosql.table import crypto_process_query_items
 from abnosql.table import get_sql_params
 from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
@@ -115,10 +118,12 @@ class Table(TableBase):
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
+        item = crypto_decrypt_item(self.config, item)
         return item
 
     @cosmos_ex_handler()
     def put_item(self, item: t.Dict):
+        item = crypto_encrypt_item(self.config, item)
         self._container(self.name).upsert_item(item)
         self.pm.hook.put_item_post(table=self.name, item=item)
 
@@ -160,12 +165,14 @@ class Table(TableBase):
             statement += f' {op} {self.name}.{param[1:]} = {param}'
             op = 'AND'
 
-        return self.query_sql(
+        items = self.query_sql(
             statement,
             parameters,
             limit=limit,
             next=next
         )
+        items = crypto_process_query_items(self.config, items)
+        return items
 
     @cosmos_ex_handler()
     def query_sql(
@@ -205,7 +212,7 @@ class Table(TableBase):
         items = list(container.query_items(**kwargs))
         for i in range(len(items)):
             items[i] = strip_cosmos_attrs(items[i])
-
+        items = crypto_process_query_items(self.config, items)
         return {
             'items': items,
             'next': None

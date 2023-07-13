@@ -10,11 +10,17 @@ from abnosql import table
 
 
 KEY_ATTRS: t.Dict[str, t.List[str]] = {}
+CRYPTO_ATTRS: t.Dict[str, t.List[str]] = {}
 
 
 def set_keyattrs(key_attrs: t.Dict[str, t.List[str]]):
     global KEY_ATTRS
     KEY_ATTRS = key_attrs
+
+
+def set_crypto_attrs(attrs: t.Dict[str, t.List[str]]):
+    global CRYPTO_ATTRS
+    CRYPTO_ATTRS = attrs
 
 
 def mock_cosmos(f):
@@ -73,9 +79,17 @@ def mock_cosmos(f):
             return _response(404)
 
         # use memory table to mock cosmos
+        global CRYPTO_ATTRS
+        crypto_attrs = CRYPTO_ATTRS.get(table_name)
+        config = {'key_attrs': key_attrs}
+        if crypto_attrs is not None:
+            config['crypto'] = {
+                'attrs': crypto_attrs,
+                'key_attrs': key_attrs
+            }
         tb = table(
             table_name,
-            config={'key_attrs': key_attrs},
+            config=config,
             database='memory'
         )
 
