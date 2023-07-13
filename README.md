@@ -36,7 +36,7 @@ pip install abnosql[dynamodb]
 pip install abnosql[cosmos]
 ```
 
-By default, abnosql does not include database depedendencies.  This is to facilitate packaging
+By default, abnosql does not include database dependencies.  This is to facilitate packaging
 abnosql into AWS Lambda or Azure Functions (for example), without over-bloating the packages
 
 # Usage
@@ -73,7 +73,7 @@ assert tb.query({'hk': '1'})['items'] == [item]
 # be careful not to use cloud specific statements!
 assert tb.query_sql(
     'SELECT * FROM mytable WHERE hk = @hk AND num > @num',
-    {'@hk': '1', '@num': 5}
+    {'@hk': '1', '@num': 4}
 )['items'] == [item]
 
 tb.delete_item({'hk': '1', 'rk': 'a'})
