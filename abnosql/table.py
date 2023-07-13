@@ -7,8 +7,8 @@ import typing as t
 
 import pluggy  # type: ignore
 
-from abnosql.crypto import crypto
 import abnosql.exceptions as ex
+from abnosql.kms import kms
 from abnosql import plugin
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
@@ -255,48 +255,48 @@ def validate_statement(statement: str):
         raise ex.ValidationException('statement must start with SELECT')
 
 
-def crypto_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
-    ccfg = config.get('crypto')
-    if ccfg is None:
+def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
+    kcfg = config.get('kms')
+    if kcfg is None:
         return item
-    context = {k: item.get(k) for k in ccfg['key_attrs']}
+    context = {k: item.get(k) for k in kcfg['key_attrs']}
     # encrypt defined attrs
-    for attr in ccfg['attrs']:
+    for attr in kcfg['attrs']:
         val = item.get(attr)
         if val is None:
             continue
         if not isinstance(attr, str):
             val = json.dumps(val)
-        item[attr] = ccfg['pm'].encrypt(val, context)
+        item[attr] = kcfg['pm'].encrypt(val, context)
     return item
 
 
-def crypto_decrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
-    ccfg = config.get('crypto')
-    if not isinstance(ccfg, dict):
+def kms_decrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
+    kcfg = config.get('kms')
+    if not isinstance(kcfg, dict):
         return item
-    context = {k: item.get(k) for k in ccfg['key_attrs']}
+    context = {k: item.get(k) for k in kcfg['key_attrs']}
     # decrypt defined attrs
-    for attr in ccfg['attrs']:
+    for attr in kcfg['attrs']:
         val = item.get(attr)
         if val is None:
             continue
         if not isinstance(attr, str):
             val = json.dumps(val)
-        item[attr] = ccfg['pm'].decrypt(val, context)
+        item[attr] = kcfg['pm'].decrypt(val, context)
     return item
 
 
-def crypto_process_query_items(
+def kms_process_query_items(
     config: t.Dict,
     items: t.List[t.Dict]
 ) -> t.List[t.Dict]:
     # remove encrypted values from items
-    ccfg = config.get('crypto')
-    if not isinstance(ccfg, dict):
+    kcfg = config.get('kms')
+    if not isinstance(kcfg, dict):
         return items
     for i in range(len(items)):
-        for attr in ccfg['attrs']:
+        for attr in kcfg['attrs']:
             items[i].pop(attr, None)
     return items
 
@@ -317,25 +317,26 @@ def table(
     _module = module.Table(pm, name, config)
 
     # load crypto module
-    ccfg = config.get('crypto')
-    if isinstance(ccfg, dict):
+    kcfg = config.get('kms')
+    if isinstance(kcfg, dict):
         defaults = {
             'dynamodb': 'aws',
             'cosmosdb': 'azure'
         }
-        if database is not None and 'provider' not in config:
+        provider = kcfg.get('provider')
+        if database is not None and provider is None:
             provider = defaults.get(database)
-        _crypto_module = crypto(ccfg, provider)
-        config['crypto']['pm'] = _crypto_module
+        _crypto_module = kms(kcfg, provider)
+        config['kms']['pm'] = _crypto_module
 
         # check required attrs
         missing = [
             _ for _ in ['attrs', 'key_attrs']
-            if not isinstance(ccfg, list) or len(ccfg[_]) == 0
+            if not isinstance(kcfg, list) or len(kcfg[_]) == 0
         ]
         if len(missing):
             raise ex.ConfigException(
-                'crypto config missing %s' % ', '.join(missing)
+                'kms config missing %s' % ', '.join(missing)
             )
 
     return _module

@@ -24,12 +24,13 @@ __version__ = get_version()
 
 
 base_deps = [
+    'pluggy'
+]
+cli_deps = [
     'click',
-    'pluggy',
-    'sqlglot',
     'tabulate'
 ]
-aws_crypto_deps = [
+aws_kms_deps = [
     'boto3',
     'aws-encryption-sdk',
 ]
@@ -40,27 +41,29 @@ aws_dynamodb_deps = [
 azure_cosmos_deps = [
     'azure-cosmos'
 ]
-azure_crypto_deps = [
+azure_kms_deps = [
     'azure-identity',
     'azure-keyvault-keys',
     'cryptography'
 ]
 all_deps = (
     base_deps
+    + cli_deps
     + aws_dynamodb_deps
-    + aws_crypto_deps
+    + aws_kms_deps
     + azure_cosmos_deps
-    + azure_crypto_deps
+    + azure_kms_deps
 )
-tests_require = all_deps + [
+test_deps = all_deps + [
     'coverage',
     'moto[dynamodb]',
     'mypy',
     'pytest',
     'pytest-cov',
-    'responses'
+    'responses',
+    'sqlglot'
 ]
-dev_require = tests_require + [
+dev_deps = test_deps + [
     'pdoc',
     'pre-commit'
 ]
@@ -84,24 +87,27 @@ setup(
     platforms='any',
     packages=find_packages(exclude=['tests']),
 
-    tests_require=tests_require,
+    tests_require=test_deps,
     extras_require={
-        'dev': dev_require,
-        'test': tests_require,
+        'dev': dev_deps,
+        'test': test_deps,
+        'cli': cli_deps,
+        'aws': aws_dynamodb_deps + aws_kms_deps,
+        'azure': azure_cosmos_deps + azure_kms_deps,
         'dynamodb': aws_dynamodb_deps,
         'cosmos': azure_cosmos_deps,
-        'aws-crypto': aws_crypto_deps,
-        'azure-crypto': azure_crypto_deps
+        'aws-kms': aws_kms_deps,
+        'azure-kms': azure_kms_deps
     },
-    python_requires='>=3.8,<4.0',
+    python_requires='>=3.9,<4.0',
     test_suite='tests',
 
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Topic :: System :: Distributed Computing',
@@ -110,7 +116,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'abnosql = abnosql:cli',
+            'abnosql = abnosql:cli.cli',
         ]
     }
 )

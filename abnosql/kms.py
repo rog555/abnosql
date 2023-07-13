@@ -8,15 +8,15 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql import plugin
 
-hookspec = pluggy.HookspecMarker('abnosql.crypto')
+hookspec = pluggy.HookspecMarker('abnosql.kms')
 
 
-class CryptoBase(metaclass=ABCMeta):
+class KmsBase(metaclass=ABCMeta):
     @abstractmethod
     def __init__(
         self, pm: plugin.PM, config: t.Optional[dict] = None
     ) -> None:
-        """Instantiate crypto object
+        """Instantiate kms object
 
         Args:
 
@@ -66,14 +66,14 @@ def get_key_ids():
     )
 
 
-def crypto(
+def kms(
     config: t.Optional[dict] = None,
     provider: t.Optional[str] = None
-) -> CryptoBase:
+) -> KmsBase:
     if provider is None:
-        provider = os.environ.get('ABNOSQL_CRYPTO')
-    pm = plugin.get_pm('crypto')
+        provider = os.environ.get('ABNOSQL_KMS')
+    pm = plugin.get_pm('kms')
     module = pm.get_plugin(provider)
     if module is None:
-        raise ex.PluginException(f'crypto.{provider} plugin not found')
-    return module.Crypto(pm, config)
+        raise ex.PluginException(f'kms.{provider} plugin not found')
+    return module.Kms(pm, config)

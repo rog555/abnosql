@@ -8,10 +8,10 @@ import pluggy  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
-from abnosql.table import crypto_decrypt_item
-from abnosql.table import crypto_encrypt_item
-from abnosql.table import crypto_process_query_items
 from abnosql.table import get_sql_params
+from abnosql.table import kms_decrypt_item
+from abnosql.table import kms_encrypt_item
+from abnosql.table import kms_process_query_items
 from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
 
@@ -163,12 +163,12 @@ class Table(TableBase):
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
-        item = crypto_decrypt_item(self.config, item)
+        item = kms_decrypt_item(self.config, item)
         return item
 
     @dynamodb_ex_handler()
     def put_item(self, item: t.Dict):
-        item = crypto_encrypt_item(self.config, item)
+        item = kms_encrypt_item(self.config, item)
         self.table.put_item(Item=item)
         self.pm.hook.put_item_post(table=self.name, item=item)
 
@@ -202,7 +202,7 @@ class Table(TableBase):
             kwargs['Limit'] = limit
         response = self.table.query(**kwargs)
         items = response.get('Items', [])
-        items = crypto_process_query_items(self.config, items)
+        items = kms_process_query_items(self.config, items)
         return {
             'items': deserialize(items),
             'next': response.get('LastEvaluatedKey')
@@ -234,7 +234,7 @@ class Table(TableBase):
         response = client.execute_statement(**kwargs)
         items = []
         _items = response.get('Items', [])
-        _items = crypto_process_query_items(self.config, _items)
+        _items = kms_process_query_items(self.config, _items)
         for item in _items:
             items.append(json_util.loads(json.dumps(item)))
 

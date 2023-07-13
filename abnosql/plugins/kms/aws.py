@@ -4,9 +4,9 @@ import functools
 import os
 import typing as t
 
-from abnosql.crypto import CryptoBase
-from abnosql.crypto import get_key_ids
 import abnosql.exceptions as ex
+from abnosql.kms import get_key_ids
+from abnosql.kms import KmsBase
 from abnosql.plugin import PM
 
 
@@ -44,7 +44,7 @@ def kms_ex_handler(raise_not_found: t.Optional[bool] = True):
     return decorator
 
 
-class Crypto(CryptoBase):
+class Kms(KmsBase):
 
     def __init__(
         self, pm: PM, config: t.Optional[dict] = None

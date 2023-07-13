@@ -5,9 +5,9 @@ import json
 import os
 import typing as t
 
-from abnosql.crypto import CryptoBase
-from abnosql.crypto import get_key_ids
 import abnosql.exceptions as ex
+from abnosql.kms import get_key_ids
+from abnosql.kms import KmsBase
 from abnosql.plugin import PM
 
 
@@ -20,7 +20,7 @@ except ImportError:
     MISSING_DEPS = True
 
 
-def azure_ex_handler(raise_not_found: t.Optional[bool] = True):
+def kms_ex_handler(raise_not_found: t.Optional[bool] = True):
 
     def get_message(e):
         return e.message.splitlines()[0].replace('Message: ', '')
@@ -45,7 +45,7 @@ def azure_ex_handler(raise_not_found: t.Optional[bool] = True):
     return decorator
 
 
-class Crypto(CryptoBase):
+class Kms(KmsBase):
 
     def __init__(
         self, pm: PM, config: t.Optional[dict] = None
@@ -70,7 +70,7 @@ class Crypto(CryptoBase):
             config = t.cast(t.Dict, _config)
         self.config = config
 
-    @azure_ex_handler()
+    @kms_ex_handler()
     def encrypt(self, plaintext: str, context: t.Dict) -> str:
         # azure doesnt have GenerateDataKey equivilent
         # as AWS does, and its encrypt/decrypt APIs
@@ -99,7 +99,7 @@ class Crypto(CryptoBase):
         ).decode()
         return serialized
 
-    @azure_ex_handler()
+    @kms_ex_handler()
     def decrypt(self, serialized: str, context: t.Dict) -> str:
         aad = json.dumps(context).encode()
         obj = json.loads(b64decode(serialized))

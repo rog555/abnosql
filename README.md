@@ -32,8 +32,15 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
 ## Installation
 
 ```
-pip install abnosql[dynamodb]
-pip install abnosql[cosmos]
+pip install 'abnosql[dynamodb]'
+pip install 'abnosql[cosmos]'
+```
+
+For optional client side field level envelope encryption
+
+```
+pip install 'abnosql[aws-kms]'
+pip install 'abnosql[azure-kms]'
 ```
 
 By default, abnosql does not include database dependencies.  This is to facilitate packaging
@@ -217,6 +224,12 @@ Commands:
   put-items
   query
   query-sql
+```
+
+To install dependencies
+
+```
+pip install 'abnosql[cli]'
 ```
 
 Example querying table in Azure Cosmos, with cosmos.json config file containing endpoint, credential and database
