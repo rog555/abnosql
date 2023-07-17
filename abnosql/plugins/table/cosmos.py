@@ -10,6 +10,7 @@ from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
+from abnosql.table import parse_connstr
 from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
 
@@ -89,13 +90,23 @@ class Table(TableBase):
         _client = self.config.get('database_client', self.database_client)
         if _client is not None:
             return _client
+        pc = parse_connstr()
         cf = {}
+        if pc is not None:
+            cf.update({
+                'account': pc.username,
+                'database': pc.hostname,
+                'credential': pc.password
+            })
         required = ['endpoint', 'credential', 'database']
         for attr in ['account'] + required:
-            cf[attr] = self.config.get(
+            val = self.config.get(
                 attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
             )
-        if cf['endpoint'] is None and cf['account'] is not None:
+            # override
+            if val is not None:
+                cf[attr] = val
+        if cf.get('endpoint') is None and cf['account'] is not None:
             cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
         missing = [_ for _ in required if cf[_] is None]
         if len(missing):
@@ -123,6 +134,9 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def put_item(self, item: t.Dict):
+        _item = self.pm.hook.put_item_pre(table=self.name, item=item)
+        if _item:
+            item = _item[0]
         item = kms_encrypt_item(self.config, item)
         self._container(self.name).upsert_item(item)
         self.pm.hook.put_item_post(table=self.name, item=item)
@@ -144,12 +158,13 @@ class Table(TableBase):
     @cosmos_ex_handler()
     def query(
         self,
-        key: t.Dict[str, t.Any],
+        key: t.Optional[t.Dict[str, t.Any]] = None,
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         filters = filters or {}
+        key = key or {}
         validate_query_attrs(key, filters)
         parameters = {
             f'@{k}': v
@@ -165,14 +180,14 @@ class Table(TableBase):
             statement += f' {op} {self.name}.{param[1:]} = {param}'
             op = 'AND'
 
-        items = self.query_sql(
+        resp = self.query_sql(
             statement,
             parameters,
             limit=limit,
             next=next
         )
-        items = kms_process_query_items(self.config, items)
-        return items
+        resp['items'] = kms_process_query_items(self.config, resp['items'])
+        return resp
 
     @cosmos_ex_handler()
     def query_sql(
@@ -199,8 +214,10 @@ class Table(TableBase):
             kwargs['parameters'] = params
         if limit:
             kwargs['max_item_count'] = limit
+        if next:
+            kwargs['continuation'] = next
         # TODO(x-ms-continuation)
-        # from microsoft / planetary-computer-tasks on github
+        # from microsoft / planetary-computer-tasks records.py on github
         # The Python SDK does not support continuation tokens
         # for cross-partition queries.
         #
@@ -210,10 +227,14 @@ class Table(TableBase):
         # print(f'KWARGS: {kwargs}')
         container = self._container(self.name)
         items = list(container.query_items(**kwargs))
+        continuation = container.client_connection.last_response_headers.get(
+            'x-ms-continuation'
+        )
+        print(f'continuation: {continuation}')
         for i in range(len(items)):
             items[i] = strip_cosmos_attrs(items[i])
         items = kms_process_query_items(self.config, items)
         return {
             'items': items,
-            'next': None
+            'next': continuation
         }

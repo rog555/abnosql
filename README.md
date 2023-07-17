@@ -18,6 +18,7 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [Querying](#querying)
   - [Indexes](#indexes)
   - [Partition Keys](#partition-keys)
+  - [Client Side Encryption](#client-side-encryption)
 - [Configuration](#configuration)
   - [AWS DynamoDB](#aws-dynamodb)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql)
@@ -36,7 +37,7 @@ pip install 'abnosql[dynamodb]'
 pip install 'abnosql[cosmos]'
 ```
 
-For optional client side field level envelope encryption
+For optional [client side](#client-side-encryption) field level envelope encryption
 
 ```
 pip install 'abnosql[aws-kms]'
@@ -109,8 +110,61 @@ Beyond partition and range keys defined on the table, indexes are not currently 
 
 A few methods such as `get_item()`, `delete_item()` and `query()` need to know partition/hash keys as defined on the table.  To avoid having to configure this or lookup from the provider, the convention used is that the first kwarg or dictionary item is the partition key, and if supplied the 2nd is the range/sort key.
 
+## Client Side Encryption
+
+If configured in table config, abnosql will perform client side encryption using AWS KMS or Azure KeyVault
+
+Each attribute value defined in the config is encrypted with a 256-bit AES-GCM data key generated for each attribute value:
+
+- `aws` uses [AWS Encryption SDK for Python](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/python.html)
+- `azure` uses [python cryptography](https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM.generate_key) to generate AES-GCM data key, encrypt the attribute value and then uses an RSA CMK in Azure Keyvault to wrap/unwrap (envelope encryption) the AES-GCM data key.  The module uses the [azure-keyvaults-keys](https://learn.microsoft.com/en-us/python/api/overview/azure/keyvault-keys-readme?view=azure-python) python SDK for wrap/unrap functionality of the generated data key (Azure doesnt support generate data key as AWS does)
+
+Both providers use a [256-bit AES-GCM](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/supported-algorithms.html) generated data key with AAD/encryption context (Azure provider uses a 96-nonce).  AES-GCM is an Authenticated symmetric encryption scheme used by both AWS and Azure (and [Hashicorp Vault](https://developer.hashicorp.com/vault/docs/secrets/transit#aes256-gcm96))
+
+See also [AWS Encryption Best Practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/encryption-best-practices/welcome.html)
+
+Example config:
+
+```
+{
+    'kms': {
+        'key_ids': ['https://foo.vault.azure.net/keys/bar/45e36a1024a04062bd489db0d9004d09'],
+        'key_attrs': ['hk', 'rk'],
+        'attrs': ['obj', 'str']
+    }
+}
+```
+
+Where:
+- `key_ids`: list of AWS KMS Key ARNs or Azure KeyVault identifier (URL to RSA CMK).  This is picked up via `ABNOSQL_KMS_KEYS` env var as a comma separated list (*NOTE: env var recommended to avoid provider specific code*)
+- `key_attrs`: list of key attributes in the item from which the AAD/encryption context is set
+- `attrs`: list of attributes keys to encrypt
+- `key_bytes`: optional for azure, use your own AESGCM key if specified, otherwise generate one
+
+If `kms` config attribute is present, abnosql will look for the `ABNOSQL_KMS` provider to load the appropriate provider KMS module (eg "aws" or "azure"), and if not present use default depending on the database (eg cosmos will use azure, dynamodb will use aws)
+
+In example above, the key_attrs `['hk', 'rk']` are used to define the encryption context / AAD used, and attrs `['obj', 'str']` what attributes to encrypt/decrypt
+
+With an item:
+
+```
+{
+    'hk': '1',
+    'rk': 'b',
+    'obj': {'foo':'bar'},
+    'str': 'foobar'
+}
+```
+
+The encryption context / AAD is set to hk=1 and rk=b and obj and str values are encrypted
+
+If you don't want to use any of these providers, then you can use `put_item_pre` and `get_item_post` hooks to perform your own client side encryption
+
+See also [AWS Multi-region encryption keys](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/configure.html#config-mrks) and set `ABNOSQL_KMS_KEYS` env var as comma list of ARNs
 
 # Configuration
+
+It is recommended to use environment variables where possible to avoid provider specific application code
 
 ## AWS DynamoDB
 
@@ -133,15 +187,19 @@ tb = table(
 
 ## Azure Cosmos NoSQL
 
-Set the following environment variables
+Set the following environment variables:
 
 - `ABNOSQL_DB` = "cosmos"
 - `ABNOSQL_COSMOS_ACCOUNT` = your database account
 - `ABNOSQL_COSMOS_ENDPOINT` = drived from `ABNOSQL_COSMOS_ACCOUNT` if not set
-- `ABNOSQL_COSMOS_CREDENTIAL` = your cosmos credential
+- `ABNOSQL_COSMOS_CREDENTIAL` = your cosmos credential, use [Azure Key Vault References](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli) if using Azure Functions
 - `ABNOSQL_COSMOS_DATABASE` = cosmos database
 
-Or define in config
+**OR** - use the connection string format:
+
+- `ABNOSQL_DB` = "cosmos://account@credential:database"
+
+Or define in config (though ideally you want to use env vars to avoid application specific code).
 
 ```
 from abnosq import table
@@ -161,6 +219,7 @@ The following hooks are available
 
 - `set_config` - set config
 - `get_item_post` - called after `get_item()`, can return modified data
+- `put_item_pre`
 - `put_item_post`
 - `put_items_post`
 - `delete_item_post`
@@ -245,6 +304,7 @@ p2           p2.2      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]
 
 # Future Enhancements / Ideas
 
+- [x] client side encryption
 - [ ] test pagination & exception handling
 - [ ] [Google Firestore](https://cloud.google.com/python/docs/reference/firestore/latest) support, ideally in the core library (though could be added outside via use of the plugin system).  Would need something like [FireSQL](https://firebaseopensource.com/projects/jsayol/firesql/) implemented for oython, maybe via sqlglot
 - [ ] Simple caching (maybe) using globals (used for AWS Lambda / Azure Functions)

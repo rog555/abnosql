@@ -114,7 +114,10 @@ def mock_cosmos(f):
                     # {'initial_headers': {'x-ms-continuation': 'sometoken'}}
                     items = tb.query_sql(
                         item['query'],
-                        {_['name']: _['value'] for _ in item['parameters']}
+                        {
+                            _['name']: _['value']
+                            for _ in item.get('parameters', {})
+                        }
                     )
                     return _response(
                         200, {'Documents': items}

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import typing as t
+from urllib.parse import urlparse
 
 import pluggy  # type: ignore
 
@@ -44,6 +45,18 @@ class TableSpecs(plugin.PluginSpec):
         Returns:
 
             dictionary containing updated item
+
+        """
+        pass
+
+    @hookspec
+    def put_item_pre(self, table: str, item: t.Dict) -> t.Dict:  # type: ignore[empty-body] # noqa E501
+        """Hook invoked before put_item()
+
+        Args:
+
+            table: table name
+            item: dictionary containing partition and range/sort key
 
         """
         pass
@@ -150,7 +163,7 @@ class TableBase(metaclass=ABCMeta):
     @abstractmethod
     def query(
         self,
-        key: t.Dict[str, t.Any],
+        key: t.Optional[t.Dict[str, t.Any]] = None,
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
@@ -200,6 +213,19 @@ def get_sql_params(
     param_val: t.Callable,
     replace: t.Optional[str] = None
 ) -> t.Tuple[str, t.List]:
+    """Get and validate statement and parameters
+
+    Args:
+
+        statement: SQL statement to query table
+        parameters: optional dictionary containing @key = value placeholders
+        param_val: callable to get
+        replace: optional placeholder string (eg ?) to replace vars with
+
+    Returns:
+        statement, params
+
+    """
     # convert @variable to dynamodb ? placeholders
     validate_statement(statement)
     vars = list(re.findall(r'\@[a-zA-Z0-9_.-]+', statement))
@@ -225,15 +251,25 @@ def get_sql_params(
     return (statement, params)
 
 
-def quote_str(str):
-    return "'" + str.translate(
-        str.maketrans({
+def quote_str(string):
+    # Quotes string
+    return "'" + string.translate(
+        string.maketrans({
             "'": "\\'"
         })
     ) + "'"
 
 
 def validate_query_attrs(key: t.Dict, filters: t.Dict):
+    """Validate that the query and filter attributes are named correctly
+
+    Args:
+
+        key: key dictionary
+        filters: filter dictionary
+
+    """
+    # convert @variable to dynamodb ? placeholders
     _name_pat = re.compile(r'^[a-zA-Z09_-]+$')
 
     def _validate_key_names(obj):
@@ -249,6 +285,13 @@ def validate_query_attrs(key: t.Dict, filters: t.Dict):
 
 
 def validate_statement(statement: str):
+    """Validate statement
+
+    Args:
+
+        statement: SQL statement
+
+    """
     # sqlglot can do this (and sqlparse), but lets keep it simple
     tokens = [_.strip() for _ in statement.split(' ') if _.strip() != '']
     if len(tokens) == 0 or tokens[0].upper() != 'SELECT':
@@ -256,6 +299,41 @@ def validate_statement(statement: str):
 
 
 def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
+    """Encrypt item values as defined in config
+
+    Each attribute value is encrypted with data key generated each time for both providers:
+
+    - aws_kms uses aws-encryption-sdk
+    - azure_kms uses Azure Keyvault RSA CMK to envelope encrypt data key
+
+    Both providers use AESGCM generated data key with AAD/encryption context
+
+    Example config:
+
+        {
+            'kms': {
+                'key_ids': ['https://foo.vault.azure.net/keys/bar/45e36a1024a04062bd489db0d9004d09'],
+                'key_attrs': ['hk', 'rk'],
+                'attrs': ['obj', 'str'],
+                'key_bytes': b'somekeybytearray'
+            }
+        }
+
+    Where:
+        - key_ids: list of AWS KMS Key ARNs or  or Azure KeyVault identifier (URL to RSA CMK).  This is picked up via `ABNOSQL_KMS_KEYS` env var as comma separated list
+        - key_attrs: key attributes in the item for which to the AAD/encryption context is set
+        - attrs: attributes to encrypt
+        - key_bytes: use your own AESGCM key if specified, otherwise generate one
+
+    Args:
+
+        config: config dictionary
+        item: item dict
+
+    Returns:
+        item
+
+    """  # noqa: E501
     kcfg = config.get('kms', {})
     if item is None or not kcfg:
         return item
@@ -267,11 +345,25 @@ def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
             continue
         if not isinstance(val, str):
             val = json.dumps(val)
-        item[attr] = kcfg['pm'].encrypt(val, context)
+        item[attr] = kcfg['pm'].encrypt(
+            val, context, key=kcfg.get('key_bytes')
+        )
     return item
 
 
 def kms_decrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
+    """Decrypt item as defined in config
+
+    See kms_encrypt_item() for example config:
+
+    Args:
+
+        config: config dictionary
+        item: item dict
+
+    Returns:
+        item
+    """
     kcfg = config.get('kms', {})
     if item is None or not kcfg:
         return item
@@ -294,14 +386,33 @@ def kms_process_query_items(
     config: t.Dict,
     items: t.List[t.Dict]
 ) -> t.List[t.Dict]:
-    # remove encrypted values from items
+    """Remove encrypted attribute/values from items
+
+    Args:
+
+        config: config dictionary
+        items: list of item dicts
+
+    Returns:
+        items
+
+    """
     kcfg = config.get('kms')
     if not isinstance(kcfg, dict):
         return items
-    for i in range(len(items)):
+    _items = []
+    for item in items:
         for attr in kcfg['attrs']:
-            items[i].pop(attr, None)
-    return items
+            item.pop(attr, None)
+        _items.append(item)
+    return _items
+
+
+def parse_connstr():
+    connstr = os.environ.get('ABNOSQL_DB')
+    if connstr:
+        return urlparse(connstr)
+    return None
 
 
 def table(
@@ -309,8 +420,21 @@ def table(
     config: t.Optional[dict] = None,
     database: t.Optional[str] = None
 ) -> TableBase:
+    """Create table object
+
+    Args:
+
+        name: table name
+        config: optional config
+        database: optional database
+
+    Returns:
+        TableBase object
+
+    """
     if database is None:
-        database = os.environ.get('ABNOSQL_DB')
+        p = parse_connstr()
+        database = p.scheme or p.path
     pm = plugin.get_pm('table')
     module = pm.get_plugin(database)
     if module is None:
@@ -324,13 +448,13 @@ def table(
     if isinstance(kcfg, dict):
         defaults = {
             'dynamodb': 'aws',
-            'cosmosdb': 'azure'
+            'cosmos': 'azure'
         }
         provider = kcfg.get('provider')
         if database is not None and provider is None:
             provider = defaults.get(database)
-        _crypto_module = kms(kcfg, provider)
-        config['kms']['pm'] = _crypto_module
+        _kms_module = kms(kcfg, provider)
+        config['kms']['pm'] = _kms_module
 
         if 'session' in config and 'session' not in kcfg:
             # aws_encryption_sdk uses botocore session

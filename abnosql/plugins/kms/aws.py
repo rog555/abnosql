@@ -66,7 +66,9 @@ class Kms(KmsBase):
         )
 
     @kms_ex_handler()
-    def encrypt(self, plaintext: str, context: t.Dict) -> str:
+    def encrypt(
+        self, plaintext: str, context: t.Dict, key: t.Optional[bytes] = None
+    ) -> str:
         # not using aws dynamodb encryption sdk in case in future
         # we want to use another aws database (eg postgres)
         ciphertext, _ = self.client.encrypt(

@@ -1,3 +1,5 @@
+from base64 import b64decode
+from base64 import b64encode
 from datetime import datetime
 import functools
 import json
@@ -93,33 +95,38 @@ def serialize_dynamodb_type(var, val):
     return {_type: str(val)}
 
 
-def get_dynamodb_query_kwargs(
+def get_dynamodb_kwargs(
     name: str,
-    key: t.Dict[str, t.Any],
+    key: t.Optional[t.Dict[str, t.Any]] = None,
     filters: t.Optional[t.Dict[str, t.Any]] = None
 ) -> t.Dict:
-    if len(key) > 2 or len(key) == 0:
+    key = key or {}
+    if len(key) > 2:
         raise ValueError('key length must be 1 or 2')
     filters = filters or {}
     validate_query_attrs(key, filters)
 
-    _values = {
-        f':{k}': v
-        for k, v in key.items()
-    }
+    _values = {}
+    if len(key):
+        _values = {
+            f':{k}': v
+            for k, v in key.items()
+        }
     _names = {}
     for k, v in filters.items():
         _names[f'#{k}'] = k
         _values[f':{k}'] = v
 
-    kwargs = {
+    kwargs: t.Dict[str, t.Any] = {
         'TableName': name,
-        'Select': 'ALL_ATTRIBUTES',
-        'KeyConditionExpression': ' AND '.join([
-            f'{k} = :{k}' for k in key.keys()
-        ]),
-        'ExpressionAttributeValues': _values
+        'Select': 'ALL_ATTRIBUTES'
     }
+    if len(key):
+        kwargs['KeyConditionExpression'] = ' AND '.join([
+            f'{k} = :{k}' for k in key.keys()
+        ])
+    if len(_values):
+        kwargs['ExpressionAttributeValues'] = _values
     if len(_names):
         kwargs['ExpressionAttributeNames'] = _names
     if len(filters):
@@ -168,6 +175,9 @@ class Table(TableBase):
 
     @dynamodb_ex_handler()
     def put_item(self, item: t.Dict):
+        _item = self.pm.hook.put_item_pre(table=self.name, item=item)
+        if _item:
+            item = _item[0]
         item = kms_encrypt_item(self.config, item)
         self.table.put_item(Item=item)
         self.pm.hook.put_item_post(table=self.name, item=item)
@@ -188,24 +198,31 @@ class Table(TableBase):
     @dynamodb_ex_handler()
     def query(
         self,
-        key: t.Dict[str, t.Any],
+        key: t.Optional[t.Dict[str, t.Any]] = None,
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
         next: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
-        kwargs = get_dynamodb_query_kwargs(
+        kwargs = get_dynamodb_kwargs(
             self.name, key, filters
         )
         if next is not None:
-            kwargs['ExclusiveStartKey'] = next
+            kwargs['ExclusiveStartKey'] = json.loads(b64decode(next).decode())
         if limit is not None:
             kwargs['Limit'] = limit
-        response = self.table.query(**kwargs)
+        response = None
+        if key is not None:
+            response = self.table.query(**kwargs)
+        else:
+            response = self.table.scan(**kwargs)
         items = response.get('Items', [])
         items = kms_process_query_items(self.config, items)
+        last = response.get('LastEvaluatedKey')
+        if last is not None:
+            last = b64encode(json.dumps(last).encode()).decode()
         return {
             'items': deserialize(items),
-            'next': response.get('LastEvaluatedKey')
+            'next': last
         }
 
     @dynamodb_ex_handler()

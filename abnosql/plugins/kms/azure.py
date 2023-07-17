@@ -8,10 +8,13 @@ import typing as t
 import abnosql.exceptions as ex
 from abnosql.kms import get_keys
 from abnosql.kms import KmsBase
+from abnosql.kms import pack_bytes
+from abnosql.kms import unpack_bytes
 from abnosql.plugin import PM
 
 
 try:
+    import azure.core.exceptions as azex  # type: ignore
     from azure.identity import DefaultAzureCredential  # type: ignore
     from azure.keyvault.keys.crypto import CryptographyClient  # type: ignore
     from azure.keyvault.keys.crypto import KeyWrapAlgorithm  # type: ignore
@@ -22,23 +25,15 @@ except ImportError:
 
 def kms_ex_handler(raise_not_found: t.Optional[bool] = True):
 
-    def get_message(e):
-        return e.message.splitlines()[0].replace('Message: ', '')
-
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            # except CosmosResourceNotFoundError as e:
-            #     if raise_not_found:
-            #         raise ex.NotFoundException(get_message(e)) from None
-            #     return None
-            # except CosmosHttpResponseError as e:
-            #     code = e.status_code
-            #     if code in [400]:
-            #         raise ex.ValidationException(get_message(e)) from None
-            #     raise ex.ConfigException(get_message(e)) from None
+            except azex.ResourceNotFoundError as e:
+                if raise_not_found:
+                    raise ex.NotFoundException(e.message) from None
+                return None
             except Exception as e:
                 raise ex.PluginException(e)
         return wrapper
@@ -63,45 +58,52 @@ class Kms(KmsBase):
         )
 
     @kms_ex_handler()
-    def encrypt(self, plaintext: str, context: t.Dict) -> str:
+    def encrypt(
+        self, plaintext: str, context: t.Dict, key: t.Optional[bytes] = None
+    ) -> str:
         # azure doesnt have GenerateDataKey equivilent
         # as AWS does, and its encrypt/decrypt APIs
         # are only for use against CMKs not data keys
         # so we must do our own AESGCM key to encrypt/decrypt
         # the plaintext and then use azure to wrap/unwrap
-        # this with CMK
-        key = AESGCM.generate_key(bit_length=128)
+        # this with CMK.
+        # This follows similar pattern to aws-encryption-sdk
+        # and the wrapped/encrypted AES key lives with the data
+        context = dict(sorted(context.items()))
         aad = json.dumps(context).encode()
+        # 256-bit AES-GCM key with 96-bit nonce
+        nonce = os.urandom(96)
+        key = key or AESGCM.generate_key(bit_length=256)
         aesgcm = AESGCM(key)
-        nonce = os.urandom(12)
         # encrypt the key using Azure Key Vault CMK
         enc_key = self.crypto_client.wrap_key(
             KeyWrapAlgorithm.rsa_oaep_256, key
         ).encrypted_key
+        # delete unencrypted key from memory asap
         del key
+        # encrypt
+        ct = aesgcm.encrypt(nonce, plaintext.encode(), aad)
+        del aesgcm
+        # byte packing is smaller than json and what aws-encryption-sdk does
         serialized = b64encode(
-            json.dumps({
-                'ct': b64encode(aesgcm.encrypt(
-                    nonce, plaintext.encode(), aad
-                )).decode(),
-                'nonce': b64encode(nonce).decode(),
-                'key': b64encode(enc_key).decode(),
-                'aad': b64encode(aad).decode()
-            }).encode()
+            pack_bytes([ct, nonce, enc_key], 10000)
         ).decode()
         return serialized
 
     @kms_ex_handler()
     def decrypt(self, serialized: str, context: t.Dict) -> str:
+        context = dict(sorted(context.items()))
         aad = json.dumps(context).encode()
-        obj = json.loads(b64decode(serialized))
-        for k, v in obj.items():
-            obj[k] = b64decode(v)
+        unpacked = unpack_bytes(b64decode(serialized.encode()))
+        if len(unpacked) != 3:
+            raise ValueError('invalid serialization')
+        (ct, nonce, enc_key) = unpacked
         # decrypt the key using Azure Key Vault CMK
         key = self.crypto_client.unwrap_key(
-            KeyWrapAlgorithm.rsa_oaep_256, obj['key']
+            KeyWrapAlgorithm.rsa_oaep_256, enc_key  # obj['key']
         ).key
         aesgcm = AESGCM(key)
         del key
-        plaintext = aesgcm.decrypt(obj['nonce'], obj['ct'], aad).decode()
+        plaintext = aesgcm.decrypt(nonce, ct, aad).decode()
+        # plaintext = aesgcm.decrypt(obj['nonce'], obj['ct'], aad).decode()
         return plaintext

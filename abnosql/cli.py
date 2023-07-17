@@ -141,7 +141,8 @@ def query_sql(table, statement, parameters, database, config):
     tb = _table(table, get_config(config), database=database)
     dump(tb.query_sql(
         statement=statement,
-        parameters=parameters
+        parameters=parameters,
+        limit=1
     )['items'])
 
 

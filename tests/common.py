@@ -91,6 +91,12 @@ def test_hooks(config=None):
             return {'foo': 'bar'}
 
         @hookimpl
+        def put_item_pre(self, table: str, item: t.Dict):
+            assert self.table == table
+            self.called['put_item_pre'] = True
+            return item
+
+        @hookimpl
         def put_item_post(self, table: str, item: t.Dict):
             assert self.table == table
             self.called['put_item_post'] = True
@@ -115,6 +121,7 @@ def test_hooks(config=None):
     assert tb.config == {'a': 'b', 'key_attrs': ['hk', 'rk']}
 
     tb.put_item(item('1', 'a'))
+    assert 'put_item_pre' in hooks.called
     assert 'put_item_post' in hooks.called
 
     assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
@@ -157,3 +164,22 @@ def test_query_sql(config=None, return_response=False):
         'items': items(['1'], ['a', 'b']),
         'next': None
     }
+
+
+def test_query_scan(config=None):
+    tb = table('hash_range', config)
+    tb.put_items(items(['1', '2'], ['a', 'b']))
+    response = tb.query()
+    assert response['items'] == items(['1', '2'], ['a', 'b'])
+
+
+def test_query_pagination(config=None):
+    tb = table('hash_range')
+    _items = items(['1', '2'], ['a', 'b'])
+    tb.put_items(_items)
+    response = tb.query(limit=1)
+    assert response['items'] == [_items[0]]
+    next = response['next']
+    assert isinstance(next, str) and len(next) > 0
+    response = tb.query(limit=1, next=next)
+    assert response['items'] == [_items[1]]

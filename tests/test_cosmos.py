@@ -70,3 +70,17 @@ def test_query():
 def test_query_sql():
     setup_cosmos()
     cmn.test_query_sql()
+
+
+@mock_cosmos
+@responses.activate
+def test_query_scan():
+    setup_cosmos()
+    cmn.test_query_scan()
+
+
+# @mock_cosmos
+# @responses.activate
+# def test_query_pagination():
+#     setup_cosmos()
+#     cmn.test_query_pagination()

@@ -44,7 +44,7 @@ azure_cosmos_deps = [
 azure_kms_deps = [
     'azure-identity',
     'azure-keyvault-keys',
-    'cryptography'
+    'cryptography'  # already used by azure-identity
 ]
 all_deps = (
     base_deps

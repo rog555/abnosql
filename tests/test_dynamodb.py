@@ -77,3 +77,17 @@ def test_query():
 def test_query_sql():
     setup_dynamodb()
     cmn.test_query_sql()
+
+
+@mock_dynamodbx
+@mock_dynamodb
+def test_query_scan():
+    setup_dynamodb()
+    cmn.test_query_scan()
+
+
+@mock_dynamodbx
+@mock_dynamodb
+def test_query_pagination():
+    setup_dynamodb()
+    cmn.test_query_pagination()
