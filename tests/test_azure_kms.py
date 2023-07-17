@@ -44,9 +44,8 @@ def setup_cosmos():
 @mock_cosmos
 @responses.activate
 def test_get_put_item():
-
     config = setup_cosmos()
-    cmn.test_get_item(config, ['hash_range'])    
+    cmn.test_get_item(config, ['hash_range'])
 
     # check its encrypted
     tb = table('hash_range', database='memory')
