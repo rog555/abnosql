@@ -79,8 +79,8 @@ def test_query_scan():
     cmn.test_query_scan()
 
 
-# @mock_cosmos
-# @responses.activate
-# def test_query_pagination():
-#     setup_cosmos()
-#     cmn.test_query_pagination()
+@mock_cosmos
+@responses.activate
+def test_query_pagination():
+    setup_cosmos()
+    cmn.test_query_pagination()

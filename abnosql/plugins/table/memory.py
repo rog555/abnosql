@@ -5,6 +5,8 @@ import typing as t
 import pluggy  # type: ignore
 import sqlglot  # type: ignore
 from sqlglot.executor import execute  # type: ignore
+from sqlglot import exp  # type: ignore
+from sqlglot import parse_one  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
@@ -42,6 +44,11 @@ def get_table_name(statement: str):
     ))
 
 
+def get_table_count(name: str) -> int:
+    global TABLES
+    return len(list(TABLES.get(name, {}).values()))
+
+
 def query_items(
     statement: str,
     items: t.List[t.Dict[str, t.Any]],
@@ -72,15 +79,34 @@ def query_items(
         table_name = get_table_name(statement)
 
     # sqlglot execute can't handle dict or list keys...
+    _items = []
     _unpack = {}
-    for i in range(len(items)):
-        for k, v in items[i].items():
+    for item in items:
+        new_item = item.copy()
+        for k in item.keys():
+            v = item[k]
             if type(v) in [dict, list]:
                 _unpack[k] = True
-                items[i][k] = json.dumps(v)
+                new_item[k] = json.dumps(v)
+        _items.append(new_item)
+
+    # get any offset supplied
+    offset = None
+    for _offset in parse_one(statement).find_all(exp.Offset):  # type: ignore
+        offset = _offset
+        break
+    if offset:
+        try:
+            offset = int(str(offset).split(' ')[-1])
+        except Exception:
+            offset = None
+
+    # slice the data via offset
+    if isinstance(offset, int) and offset > 0 and offset < len(_items):
+        _items = _items[offset:]
 
     # query the data
-    resp = execute(statement, tables={table_name: items})
+    resp = execute(statement, tables={table_name: _items})
     rows = [
         dict(zip(resp.columns, row))
         for row in resp.rows

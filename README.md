@@ -19,6 +19,7 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [Indexes](#indexes)
   - [Partition Keys](#partition-keys)
   - [Client Side Encryption](#client-side-encryption)
+  - [Pagination](#pagination)
 - [Configuration](#configuration)
   - [AWS DynamoDB](#aws-dynamodb)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql)
@@ -78,6 +79,9 @@ assert tb.get_item(hk='1', rk='a') == item
 
 assert tb.query({'hk': '1'})['items'] == [item]
 
+# scan
+assert tb.query()['items'] == [item]
+
 # be careful not to use cloud specific statements!
 assert tb.query_sql(
     'SELECT * FROM mytable WHERE hk = @hk AND num > @num',
@@ -93,7 +97,7 @@ See [API Docs](https://rog555.github.io/abnosql/abnosql/table.html)
 
 ## Querying
 
-`query()` performs DynamoDB [Query](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html) using KeyConditionExpression and exact match on FilterExpression if filters are supplied.  For Cosmos, SQL is generated.  This is the safest/most cloud agnostic way to query and probably OK for most use cases.
+`query()` performs DynamoDB [Query](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html) using KeyConditionExpression (if `key` supplied) and exact match on FilterExpression if filters are supplied.  For Cosmos, SQL is generated.  This is the safest/most cloud agnostic way to query and probably OK for most use cases.
 
 `query_sql()` performs Dynamodb [ExecuteStatement](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ExecuteStatement.html) passing in the supplied [PartiQL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ql-reference.html) statement.  Cosmos uses the NoSQL [SELECT](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/select) syntax.
 
@@ -112,7 +116,7 @@ A few methods such as `get_item()`, `delete_item()` and `query()` need to know p
 
 ## Client Side Encryption
 
-If configured in table config, abnosql will perform client side encryption using AWS KMS or Azure KeyVault
+If configured in table config with `kms` attribute, abnosql will perform client side encryption using AWS KMS or Azure KeyVault
 
 Each attribute value defined in the config is encrypted with a 256-bit AES-GCM data key generated for each attribute value:
 
@@ -161,6 +165,13 @@ The encryption context / AAD is set to hk=1 and rk=b and obj and str values are 
 If you don't want to use any of these providers, then you can use `put_item_pre` and `get_item_post` hooks to perform your own client side encryption
 
 See also [AWS Multi-region encryption keys](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/configure.html#config-mrks) and set `ABNOSQL_KMS_KEYS` env var as comma list of ARNs
+
+
+## Pagination
+
+`query` and `query_sql` accept `limit` and `next` optional kwargs and return `next` in response. Use these to paginate.
+
+This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
 
 # Configuration
 
@@ -305,11 +316,12 @@ p2           p2.2      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]
 # Future Enhancements / Ideas
 
 - [x] client side encryption
-- [ ] test pagination & exception handling
+- [x] test pagination & exception handling
 - [ ] [Google Firestore](https://cloud.google.com/python/docs/reference/firestore/latest) support, ideally in the core library (though could be added outside via use of the plugin system).  Would need something like [FireSQL](https://firebaseopensource.com/projects/jsayol/firesql/) implemented for oython, maybe via sqlglot
+- [ ] [Google Vault](https://cloud.google.com/python/docs/reference/cloudkms/latest/) KMS support
+- [ ] [Hashicorp Vault](https://github.com/hashicorp/vault-examples/blob/main/examples/_quick-start/python/example.py) KMS support
 - [ ] Simple caching (maybe) using globals (used for AWS Lambda / Azure Functions)
 - [ ] PostgresSQL support using JSONB column (see [here](https://medium.com/geekculture/json-and-postgresql-using-json-to-mimic-nosqls-storage-benefits-1564c69f61fc) for example).  Would be nice to avoid an ORM and having to define a model for each table...
 - [ ] blob storage backend? could use something similar to [NoDB](https://github.com/Miserlou/NoDB) but maybe combined with [smart_open](https://github.com/RaRe-Technologies/smart_open) and DuckDB's [Hive Partitioning](https://duckdb.org/docs/data/partitioning/hive_partitioning.html)
 - [ ] Redis..
 - [ ] Hook implementations to write to ElasticSearch / OpenSearch for better searching.  Useful when not able to use [AWS Stream Processors](https://aws.amazon.com/blogs/compute/indexing-amazon-dynamodb-content-with-amazon-elasticsearch-service-using-aws-lambda/) [Azure Change Feed](https://learn.microsoft.com/en-us/azure/cosmos-db/change-feed), or [Elasticstore](https://github.com/acupofjose/elasticstore). Why? because not all databases support stream processing, and if they do you don't want the hastle of using [CDC](https://berbagimadani.medium.com/sync-postgresql-to-elasticsearch-and-cdc-change-data-capture-b847e8bcf568)
-- [ ] database credential lookup using cloud native secret/vault services

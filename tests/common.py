@@ -183,3 +183,6 @@ def test_query_pagination(config=None):
     assert isinstance(next, str) and len(next) > 0
     response = tb.query(limit=1, next=next)
     assert response['items'] == [_items[1]]
+    response = tb.query(limit=2, next=response['next'])
+    assert response['items'] == _items[2:4]
+    assert response['next'] is None

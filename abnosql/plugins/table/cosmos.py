@@ -212,29 +212,47 @@ class Table(TableBase):
         }
         if len(params):
             kwargs['parameters'] = params
-        if limit:
-            kwargs['max_item_count'] = limit
-        if next:
-            kwargs['continuation'] = next
-        # TODO(x-ms-continuation)
-        # from microsoft / planetary-computer-tasks records.py on github
-        # The Python SDK does not support continuation tokens
-        # for cross-partition queries.
-        #
-        # response_hook callable doesnt show x-ms-continuation
-        # header with or without enable_cross_partition_query
-        # even when max_item_count = 1
-        # print(f'KWARGS: {kwargs}')
+        # python cosmos SDK doesnt support
+        # kwargs['max_item_count'] = limit
+        limit = limit or 100
+        next = next or '0'
+
+        # Python SDK does not support continuation
+        # for cross-partition queries - see limitations https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos  # noqa
+        # so add OFFSET and LIMIT if not already present
+        if (
+            ' OFFSET ' not in statement.upper()
+            and ' LIMIT ' not in statement.upper()
+        ):
+            kwargs['query'] += f' OFFSET {next} LIMIT {limit}'
         container = self._container(self.name)
         items = list(container.query_items(**kwargs))
-        continuation = container.client_connection.last_response_headers.get(
-            'x-ms-continuation'
-        )
-        print(f'continuation: {continuation}')
+        headers = container.client_connection.last_response_headers
+        # continuation = headers.get('x-ms-continuation')
+        # total size in 'x-ms-resource-usage' eg ;documentsCount=3
+        resource_usage = {
+            _.split('=', 1)[0]: _.split('=', 1)[1]
+            for _ in headers.get('x-ms-resource-usage', '').split(';')
+            if '=' in _
+        }
+        doc_count = None
+        try:
+            doc_count = int(resource_usage['documentsCount'])
+        except Exception:
+            doc_count = None
+
         for i in range(len(items)):
             items[i] = strip_cosmos_attrs(items[i])
         items = kms_process_query_items(self.config, items)
+        _next = None
+        try:
+            _next = limit + int(next)
+        except Exception:
+            _next = None
+        if doc_count is not None and _next is not None and _next >= doc_count:
+            _next = None
+
         return {
             'items': items,
-            'next': continuation
+            'next': str(_next) if _next and len(items) else None
         }

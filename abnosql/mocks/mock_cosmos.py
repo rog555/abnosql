@@ -6,6 +6,7 @@ from urllib import parse as urlparse
 
 import responses  # type: ignore
 
+from abnosql.plugins.table.memory import get_table_count
 from abnosql import table
 
 
@@ -110,8 +111,6 @@ def mock_cosmos(f):
                 is_query = headers.get('x-ms-documentdb-isquery') == 'true'
                 item = json.loads(request.body)
                 if is_query is True:
-                    # TODO(x-ms-continuation)
-                    # {'initial_headers': {'x-ms-continuation': 'sometoken'}}
                     items = tb.query_sql(
                         item['query'],
                         {
@@ -119,8 +118,13 @@ def mock_cosmos(f):
                             for _ in item.get('parameters', {})
                         }
                     )
+                    headers = {
+                        'x-ms-resource-usage': 'documentsCount=%s' % (
+                            get_table_count(table_name)
+                        )
+                    }
                     return _response(
-                        200, {'Documents': items}
+                        200, {'Documents': items}, headers
                     )
                 else:
                     tb.put_item(item)
