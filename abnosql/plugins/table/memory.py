@@ -98,7 +98,7 @@ def query_items(
         break
     if offset:
         try:
-            offset = int(str(offset).split(' ')[-1])
+            offset = int(str(offset).split(' ')[-1])  # type: ignore
         except Exception:
             offset = None
 
