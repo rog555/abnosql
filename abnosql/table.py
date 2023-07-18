@@ -1,5 +1,7 @@
 from abc import ABCMeta  # type: ignore
 from abc import abstractmethod
+from datetime import datetime
+from datetime import timezone
 import json
 import os
 import re
@@ -129,23 +131,33 @@ class TableBase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def put_item(self, item: t.Dict):
+    def put_item(
+        self,
+        item: t.Dict,
+        user: t.Optional[str] = None
+    ):
         """Puts table/collection item
 
         Args:
 
             item: dictionary
+            user: optional user / system ID string to add audit atts
 
         """
         pass
 
     @abstractmethod
-    def put_items(self, items: t.Iterable[t.Dict]):
+    def put_items(
+        self,
+        items: t.Iterable[t.Dict],
+        audit_user: t.Optional[str] = None
+    ):
         """Puts multiple table/collection items
 
         Args:
 
             items: list of item dictionaries
+            user: user / system ID string to add audit attrs
 
         """
         pass
@@ -406,6 +418,31 @@ def kms_process_query_items(
             item.pop(attr, None)
         _items.append(item)
     return _items
+
+
+def add_audit(item: t.Dict, user: str) -> t.Dict:
+    """Add created_by + created_date and/or modified_by + modified_date to item
+
+    Args:
+
+        item: item dict
+        user: user/system ID string
+
+    Returns:
+        item
+
+    """
+    dt_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    if 'created_by' not in item:
+        item.update({
+            'created_by': user,
+            'created_date': dt_iso
+        })
+    item.update({
+        'modified_by': user,
+        'modified_date': dt_iso
+    })
+    return item
 
 
 def parse_connstr():

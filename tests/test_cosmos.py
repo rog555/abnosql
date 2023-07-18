@@ -39,6 +39,13 @@ def test_put_item():
 
 @mock_cosmos
 @responses.activate
+def test_put_item_audit():
+    setup_cosmos()
+    cmn.test_put_item_audit()
+
+
+@mock_cosmos
+@responses.activate
 def test_put_items():
     setup_cosmos()
     cmn.test_put_items()

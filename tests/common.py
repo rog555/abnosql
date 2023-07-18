@@ -55,6 +55,26 @@ def test_put_item(config=None):
     assert tb.get_item(hk='1', rk='a') == item('1', 'a')
 
 
+def test_put_item_audit(config=None):
+    tb = table('hash_range', config)
+
+    tb.put_item(item('1', 'a'), user='foo')
+    item1 = tb.get_item(hk='1', rk='a')
+    print(item1)
+    assert item1['created_by'] == 'foo'
+    assert item1['modified_by'] == 'foo'
+    assert item1['created_date'].startswith('20')
+    assert item1['modified_date'] == item1['created_date']
+
+    tb.put_item(item1, user='bar')
+    item2 = tb.get_item(hk='1', rk='a')
+    print(item2)
+    assert item2['created_by'] == 'foo'
+    assert item2['modified_by'] == 'bar'
+    assert item2['created_date'] == item1['created_date']
+    assert item2['modified_date'] >= item2['created_date']
+
+
 def test_put_items(config=None):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))

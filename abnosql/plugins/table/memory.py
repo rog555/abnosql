@@ -10,6 +10,7 @@ from sqlglot import parse_one  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
+from abnosql.table import add_audit
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
@@ -175,7 +176,13 @@ class Table(TableBase):
         return item
 
     @memory_ex_handler()
-    def put_item(self, item: t.Dict):
+    def put_item(
+        self,
+        item: t.Dict,
+        user: t.Optional[str] = None
+    ):
+        if user:
+            item = add_audit(item, user)
         key = ':'.join([item[_] for _ in self.key_attrs])
         item = kms_encrypt_item(self.config, item)
         if self.items:
@@ -188,9 +195,13 @@ class Table(TableBase):
         self.pm.hook.put_item_post(table=self.name, item=item)
 
     @memory_ex_handler()
-    def put_items(self, items: t.Iterable[t.Dict]):
+    def put_items(
+        self,
+        items: t.Iterable[t.Dict],
+        user: t.Optional[str] = None
+    ):
         for item in items:
-            self.put_item(item)
+            self.put_item(item, user)
         self.pm.hook.put_items_post(table=self.name, items=items)
 
     @memory_ex_handler()

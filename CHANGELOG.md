@@ -12,4 +12,4 @@ Changelog
 
 ## [v0.0.3] - 2023-07-17
 
-- client side encryption
+- client side encryption, user audit

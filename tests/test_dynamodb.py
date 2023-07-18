@@ -49,6 +49,12 @@ def test_put_item():
 
 
 @mock_dynamodb
+def test_put_item_audit():
+    setup_dynamodb()
+    cmn.test_put_item_audit()
+
+
+@mock_dynamodb
 def test_put_items():
     setup_dynamodb()
     cmn.test_put_items()

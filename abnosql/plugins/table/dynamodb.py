@@ -10,6 +10,7 @@ import pluggy  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
+from abnosql.table import add_audit
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
@@ -174,7 +175,13 @@ class Table(TableBase):
         return item
 
     @dynamodb_ex_handler()
-    def put_item(self, item: t.Dict):
+    def put_item(
+        self, item:
+        t.Dict,
+        user: t.Optional[str] = None
+    ):
+        if user:
+            item = add_audit(item, user)
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
         if _item:
             item = _item[0]
@@ -183,10 +190,14 @@ class Table(TableBase):
         self.pm.hook.put_item_post(table=self.name, item=item)
 
     @dynamodb_ex_handler()
-    def put_items(self, items: t.Iterable[t.Dict]):
+    def put_items(
+        self,
+        items: t.Iterable[t.Dict],
+        user: t.Optional[str] = None
+    ):
         # TODO(batch)
         for item in items:
-            self.put_item(item)
+            self.put_item(item, user)
         self.pm.hook.put_items_post(table=self.name, items=items)
 
     @dynamodb_ex_handler()

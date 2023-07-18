@@ -20,6 +20,7 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [Partition Keys](#partition-keys)
   - [Client Side Encryption](#client-side-encryption)
   - [Pagination](#pagination)
+  - [Audit](#audit)
 - [Configuration](#configuration)
   - [AWS DynamoDB](#aws-dynamodb)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql)
@@ -172,6 +173,17 @@ See also [AWS Multi-region encryption keys](https://docs.aws.amazon.com/encrypti
 `query` and `query_sql` accept `limit` and `next` optional kwargs and return `next` in response. Use these to paginate.
 
 This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
+
+## Audit
+
+`put_item()` and `put_items()` take an optional `user` kwarg.  If supplied, absnosql will add the following to the item:
+
+- `created_by` - value of `user`, added if does not exist in item supplied to put_item()
+- `created_date` - UTC ISO timestamp string, added if does not exist
+- `modified_by` - value of `user` always added
+- `modified_date` - UTC ISO timestamp string, always added
+
+Because abnosql doesnt first check if the item already exists, and doesn't support update expressions, there can be a risk with the created* values being re-added if the existing item is not read first and then supplied to put_item(). Its up to application logic to do this - using this feature or not :-)
 
 # Configuration
 
