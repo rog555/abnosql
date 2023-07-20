@@ -85,7 +85,7 @@ assert tb.query()['items'] == [item]
 
 # be careful not to use cloud specific statements!
 assert tb.query_sql(
-    'SELECT * FROM mytable WHERE hk = @hk AND num > @num',
+    'SELECT * FROM mytable WHERE mytable.hk = @hk AND mytable.num > @num',
     {'@hk': '1', '@num': 4}
 )['items'] == [item]
 
@@ -178,16 +178,24 @@ This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continua
 
 `put_item()` and `put_items()` take an optional `user` kwarg.  If supplied, absnosql will add the following to the item:
 
-- `created_by` - value of `user`, added if does not exist in item supplied to put_item()
-- `created_date` - UTC ISO timestamp string, added if does not exist
-- `modified_by` - value of `user` always added
-- `modified_date` - UTC ISO timestamp string, always added
+- `createdBy` - value of `user`, added if does not exist in item supplied to put_item()
+- `createdDate` - UTC ISO timestamp string, added if does not exist
+- `modifiedBy` - value of `user` always added
+- `modifiedDate` - UTC ISO timestamp string, always added
 
 Because abnosql doesnt first check if the item already exists, and doesn't support update expressions, there can be a risk with the created* values being re-added if the existing item is not read first and then supplied to put_item(). Its up to application logic to do this - using this feature or not :-)
+
+If you prefer snake_case over CamelCase, you can set env var `ABNOSQ_AUDIT_CAMELCASE` = `FALSE`
 
 # Configuration
 
 It is recommended to use environment variables where possible to avoid provider specific application code
+
+if `ABNOSQL_DB` env var is not set, abnosql will attempt to apply defaults based on available environment variables:
+
+- `AWS_DEFAULT_REGION` - sets database to `dynamodb` (see [aws docs](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html))
+- `FUNCTIONS_WORKER_RUNTIME` - sets database to `cosmos` (see [azure docs](https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#functions_worker_runtime))
+
 
 ## AWS DynamoDB
 

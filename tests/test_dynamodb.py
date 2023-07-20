@@ -30,15 +30,20 @@ def create_table(name, rk=True):
     dynamodb.create_table(**params)
 
 
-def setup_dynamodb():
-    os.environ['ABNOSQL_DB'] = 'dynamodb'
+def setup_dynamodb(set_region=False):
+    if set_region is True:
+        os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+        os.environ.pop('ABNOSQL_DB', None)
+    else:
+        os.environ['ABNOSQL_DB'] = 'dynamodb'
     create_table('hash_range', True)
     create_table('hash_only', False)
 
 
 @mock_dynamodb
 def test_get_item():
-    setup_dynamodb()
+    # test inferring ABNOSQL_DB / database via region env var
+    setup_dynamodb(set_region=True)
     cmn.test_get_item()
 
 

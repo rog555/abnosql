@@ -432,15 +432,18 @@ def add_audit(item: t.Dict, user: str) -> t.Dict:
         item
 
     """
+    camel_case = os.environ.get('ABNOSQL_AUDIT_CAMELCASE', 'TRUE') == 'TRUE'
+    by_attr = 'By' if camel_case else '_by'
+    date_attr = 'Date' if camel_case else '_date'
     dt_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    if 'created_by' not in item:
+    if f'created{by_attr}' not in item:
         item.update({
-            'created_by': user,
-            'created_date': dt_iso
+            f'created{by_attr}': user,
+            f'created{date_attr}': dt_iso
         })
     item.update({
-        'modified_by': user,
-        'modified_date': dt_iso
+        f'modified{by_attr}': user,
+        f'modified{date_attr}': dt_iso
     })
     return item
 
@@ -471,7 +474,21 @@ def table(
     """
     if database is None:
         p = parse_connstr()
-        database = p.scheme or p.path
+        database = p.scheme or p.path if p else None
+
+    # infer database from available env vars
+    # aws: https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html  # noqa
+    # azure: https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#azure_functions_environment  # noqa
+    if database is None:
+        defaults = {
+            'AWS_DEFAULT_REGION': 'dynamodb',
+            'FUNCTIONS_WORKER_RUNTIME': 'cosmos'
+        }
+        for envvar, _database in defaults.items():
+            if os.environ.get(envvar) is not None:
+                database = _database
+                break
+
     pm = plugin.get_pm('table')
     module = pm.get_plugin(database)
     if module is None:

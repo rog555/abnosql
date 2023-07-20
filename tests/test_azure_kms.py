@@ -50,7 +50,6 @@ def test_get_put_item():
     # check its encrypted
     tb = table('hash_range', database='memory')
     item = tb.get_item(hk='1', rk='a')
-    print(item)
 
     assert item['obj'].startswith('AAABp')
     assert item['str'].startswith('AAABf')

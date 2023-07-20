@@ -60,19 +60,17 @@ def test_put_item_audit(config=None):
 
     tb.put_item(item('1', 'a'), user='foo')
     item1 = tb.get_item(hk='1', rk='a')
-    print(item1)
-    assert item1['created_by'] == 'foo'
-    assert item1['modified_by'] == 'foo'
-    assert item1['created_date'].startswith('20')
-    assert item1['modified_date'] == item1['created_date']
+    assert item1['createdBy'] == 'foo'
+    assert item1['modifiedBy'] == 'foo'
+    assert item1['createdDate'].startswith('20')
+    assert item1['modifiedDate'] == item1['createdDate']
 
     tb.put_item(item1, user='bar')
     item2 = tb.get_item(hk='1', rk='a')
-    print(item2)
-    assert item2['created_by'] == 'foo'
-    assert item2['modified_by'] == 'bar'
-    assert item2['created_date'] == item1['created_date']
-    assert item2['modified_date'] >= item2['created_date']
+    assert item2['createdBy'] == 'foo'
+    assert item2['modifiedBy'] == 'bar'
+    assert item2['createdDate'] == item1['createdDate']
+    assert item2['modifiedDate'] >= item2['createdDate']
 
 
 def test_put_items(config=None):
@@ -175,7 +173,8 @@ def test_query_sql(config=None, return_response=False):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query_sql(
-        'SELECT * FROM hash_range WHERE hk = @hk AND num > @num',
+        'SELECT * FROM hash_range '
+        + 'WHERE hash_range.hk = @hk AND hash_range.num > @num',
         {'@hk': '1', '@num': 4}
     )
     if return_response is True:
