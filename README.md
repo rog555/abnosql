@@ -17,6 +17,7 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [API Docs](#api-docs)
   - [Querying](#querying)
   - [Indexes](#indexes)
+  - [Updates](#updates)
   - [Partition Keys](#partition-keys)
   - [Client Side Encryption](#client-side-encryption)
   - [Pagination](#pagination)
@@ -56,6 +57,7 @@ from abnosql import table
 import os
 
 os.environ['ABNOSQL_DB'] = 'dynamodb'
+os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
 
 item = {
     'hk': '1',
@@ -72,7 +74,17 @@ item = {
 
 tb = table('mytable')
 
+# create/replace
 tb.put_item(item)
+
+# update - using ABNOSQL_KEY_ATTRS
+updated_item = tb.put_item(
+    {'hk': '1', 'rk': 'a', 'str': 'STR'},
+    update=True
+)
+assert updated_item['str'] == 'STR'
+
+# bulk
 tb.put_items([item])
 
 # note partition/hash key should be first kwarg
@@ -111,6 +123,18 @@ Care should be taken with `query_sql()` to not to use SQL features that are spec
 Beyond partition and range keys defined on the table, indexes are not currently supported - and these will likey differ between providers anyway (eg DynamoDB supports [Secondary Indexes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html), whereas [Cosmos](https://learn.microsoft.com/en-us/azure/cosmos-db/index-overview) has Range, Spatial and Composite.
 
 
+## Updates
+
+`put_item()` and `put_items()` support `update` boolean attribute, which if supplied will do an `update_item()` on DynamoDB, and a `patch_item()` on Cosmos.  For this to work however, you must specify the key attribute names, either via `ABNOSQL_KEY_ATTRS` env var as a comma separated list (eg perhaps multiple tables all share common partition/range key scheme), or as the `key_attrs` config item  when instantiating the table, eg:
+
+```
+tb = table('mytable', {'key_attrs': ['hk', 'rk']})
+```
+
+If you don't need to do any updates and only need to do create/replace, then these key attribute names do not need to be supplied
+
+All items being updated must actually exist first, or else exception raised
+
 ## Partition Keys
 
 A few methods such as `get_item()`, `delete_item()` and `query()` need to know partition/hash keys as defined on the table.  To avoid having to configure this or lookup from the provider, the convention used is that the first kwarg or dictionary item is the partition key, and if supplied the 2nd is the range/sort key.
@@ -142,7 +166,7 @@ Example config:
 
 Where:
 - `key_ids`: list of AWS KMS Key ARNs or Azure KeyVault identifier (URL to RSA CMK).  This is picked up via `ABNOSQL_KMS_KEYS` env var as a comma separated list (*NOTE: env var recommended to avoid provider specific code*)
-- `key_attrs`: list of key attributes in the item from which the AAD/encryption context is set
+- `key_attrs`: list of key attributes in the item from which the AAD/encryption context is set.  Taken from `ABNOSQL_KEY_ATTRS` env var or table `key_attrs` if defined there
 - `attrs`: list of attributes keys to encrypt
 - `key_bytes`: optional for azure, use your own AESGCM key if specified, otherwise generate one
 
@@ -176,16 +200,16 @@ This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continua
 
 ## Audit
 
-`put_item()` and `put_items()` take an optional `user` kwarg.  If supplied, absnosql will add the following to the item:
+`put_item()` and `put_items()` take an optional `audit_user` kwarg.  If supplied, absnosql will add the following to the item:
 
-- `createdBy` - value of `user`, added if does not exist in item supplied to put_item()
+- `createdBy` - value of `audit_user`, added if does not exist in item supplied to put_item()
 - `createdDate` - UTC ISO timestamp string, added if does not exist
-- `modifiedBy` - value of `user` always added
+- `modifiedBy` - value of `audit_user` always added
 - `modifiedDate` - UTC ISO timestamp string, always added
 
-Because abnosql doesnt first check if the item already exists, and doesn't support update expressions, there can be a risk with the created* values being re-added if the existing item is not read first and then supplied to put_item(). Its up to application logic to do this - using this feature or not :-)
+NOTE: created* will only be added if `update` is not True in a `put_item()` operation
 
-If you prefer snake_case over CamelCase, you can set env var `ABNOSQ_AUDIT_CAMELCASE` = `FALSE`
+If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_AUDIT_CAMELCASE` = `FALSE`
 
 # Configuration
 

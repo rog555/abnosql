@@ -11,6 +11,7 @@ from sqlglot import parse_one  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
@@ -148,7 +149,7 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
-        self.key_attrs = self.config.get('key_attrs', ['id'])
+        self.key_attrs = get_key_attrs(self.config)
         self.items = self.config.get('items', {})
 
     @memory_ex_handler()
@@ -179,29 +180,39 @@ class Table(TableBase):
     def put_item(
         self,
         item: t.Dict,
-        user: t.Optional[str] = None
-    ):
-        if user:
-            item = add_audit(item, user)
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
+    ) -> t.Dict:
+        if audit_user:
+            item = add_audit(item, update or False, audit_user)
         key = ':'.join([item[_] for _ in self.key_attrs])
         item = kms_encrypt_item(self.config, item)
         if self.items:
-            self.items[key] = item
+            if update is True:
+                self.items[key].update(item)
+            else:
+                self.items[key] = item
         else:
             global TABLES
             if self.name not in TABLES:
                 TABLES[self.name] = {}
-            TABLES[self.name][key] = item
+            if update is True:
+                TABLES[self.name][key].update(item)
+            else:
+                TABLES[self.name][key] = item
+        item = TABLES[self.name][key].copy()
         self.pm.hook.put_item_post(table=self.name, item=item)
+        return item
 
     @memory_ex_handler()
     def put_items(
         self,
         items: t.Iterable[t.Dict],
-        user: t.Optional[str] = None
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
     ):
         for item in items:
-            self.put_item(item, user)
+            self.put_item(item, update=update, audit_user=audit_user)
         self.pm.hook.put_items_post(table=self.name, items=items)
 
     @memory_ex_handler()

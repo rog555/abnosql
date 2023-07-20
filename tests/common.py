@@ -1,3 +1,4 @@
+import os
 import typing as t
 
 import pluggy  # type: ignore
@@ -56,21 +57,45 @@ def test_put_item(config=None):
 
 
 def test_put_item_audit(config=None):
+    # also test env var vs config
+    os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
     tb = table('hash_range', config)
 
-    tb.put_item(item('1', 'a'), user='foo')
+    tb.put_item(item('1', 'a'), audit_user='foo')
     item1 = tb.get_item(hk='1', rk='a')
     assert item1['createdBy'] == 'foo'
     assert item1['modifiedBy'] == 'foo'
     assert item1['createdDate'].startswith('20')
     assert item1['modifiedDate'] == item1['createdDate']
 
-    tb.put_item(item1, user='bar')
-    item2 = tb.get_item(hk='1', rk='a')
+    item2 = tb.put_item(
+        {'hk': '1', 'rk': 'a', 'str': 'STR'},
+        update=True,
+        audit_user='bar'
+    )
     assert item2['createdBy'] == 'foo'
     assert item2['modifiedBy'] == 'bar'
     assert item2['createdDate'] == item1['createdDate']
     assert item2['modifiedDate'] >= item2['createdDate']
+    assert item2['str'] == 'STR'
+    os.environ.pop('ABNOSQL_KEY_ATTRS')
+
+
+def test_update_item(config=None):
+    config = config or {}
+    config.update({'key_attrs': ['hk', 'rk']})
+    tb = table('hash_range', config)
+    item1 = item('1', 'a')
+    assert tb.get_item(hk='1', rk='a') is None
+    assert tb.put_item(item1) == item1
+    assert tb.get_item(hk='1', rk='a') == item1
+
+    # test update
+    item2 = {'hk': '1', 'rk': 'a', 'str': 'STR', 'num': 6}
+    item3 = item1.copy()
+    item3.update(item2)
+    assert tb.put_item(item2, update=True) == item3
+    assert tb.get_item(hk='1', rk='a') == item3
 
 
 def test_put_items(config=None):

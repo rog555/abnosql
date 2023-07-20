@@ -12,6 +12,10 @@ from abnosql import table
 
 KEY_ATTRS: t.Dict[str, t.List[str]] = {}
 CRYPTO_ATTRS: t.Dict[str, t.List[str]] = {}
+COSMOS_POST_PATCH_VALS = {
+    '_rid': '2pFqAMMTYY8BAAAAAAAAAA==',
+    '_self': 'dbs/2pFqAA==/colls/2pFqAMMTYY8=/docs/2pFqAMMTYY8BAAAAAAAAAA==/'
+}
 
 
 def set_keyattrs(key_attrs: t.Dict[str, t.List[str]]):
@@ -104,6 +108,16 @@ def mock_cosmos(f):
             elif request.method == 'DELETE':
                 tb.delete_item(**key)
                 return _response(204, None)
+            elif request.method == 'PATCH':
+                data = json.loads(request.body)
+                item = {
+                    _['path'][1:]: _['value']
+                    for _ in data['operations']
+                }
+                item.update(key)
+                item = tb.put_item(item, update=True)
+                item.update(COSMOS_POST_PATCH_VALS)
+                return _response(200, item)
 
         # /dbs/{database}/colls/{table}/docs
         elif len(parts) == 5 and parts[-1] == 'docs':
@@ -127,8 +141,9 @@ def mock_cosmos(f):
                         200, {'Documents': items}, headers
                     )
                 else:
-                    tb.put_item(item)
-                return _response(201, None)
+                    item = tb.put_item(item)
+                    item.update(COSMOS_POST_PATCH_VALS)
+                    return _response(201, item)
 
         # upsert_item() reads the collection
         # /dbs/{database}/colls/{table}
@@ -140,7 +155,7 @@ def mock_cosmos(f):
 
     @functools.wraps(f)
     def decorated(*args, **kwargs):
-        for method in ['GET', 'POST', 'DELETE', 'PUT']:
+        for method in ['GET', 'POST', 'DELETE', 'PUT', 'PATCH']:
             responses.add_callback(
                 getattr(responses, method),
                 re.compile(r'^https://.*.documents.azure.(com|cn).*'),

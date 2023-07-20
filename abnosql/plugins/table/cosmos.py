@@ -7,12 +7,14 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import parse_connstr
 from abnosql.table import TableBase
+from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
@@ -76,6 +78,7 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
+        self.key_attrs = get_key_attrs(self.config)
         self.database_client = None
 
     @cosmos_ex_handler()
@@ -137,26 +140,45 @@ class Table(TableBase):
     def put_item(
         self,
         item: t.Dict,
-        user: t.Optional[str] = None
-    ):
-        if user:
-            item = add_audit(item, user)
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
+    ) -> t.Dict:
+        if audit_user:
+            item = add_audit(item, update or False, audit_user)
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
         if _item:
             item = _item[0]
         item = kms_encrypt_item(self.config, item)
-        self._container(self.name).upsert_item(item)
+        # do update
+        if update is True:
+            validate_key_attrs(self.key_attrs, item)
+            key = {k: item.pop(k) for k in self.key_attrs}
+            kwargs = {
+                'item': key[self.key_attrs[-1]],
+                'partition_key': key[self.key_attrs[0]],
+                'patch_operations': [
+                    {'op': 'add', 'path': f'/{k}', 'value': v}
+                    for k, v in item.items()
+                ]
+            }
+            item = self._container(self.name).patch_item(**kwargs)
+        # do create/replace
+        else:
+            item = self._container(self.name).upsert_item(item)
+        item = strip_cosmos_attrs(item)
         self.pm.hook.put_item_post(table=self.name, item=item)
+        return item
 
     @cosmos_ex_handler()
     def put_items(
         self,
         items: t.Iterable[t.Dict],
-        user: t.Optional[str] = None
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
     ):
         # TODO(batch)
         for item in items:
-            self.put_item(item, user)
+            self.put_item(item, update=update, audit_user=audit_user)
         self.pm.hook.put_items_post(table=self.name, items=items)
 
     @cosmos_ex_handler()

@@ -11,11 +11,13 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import TableBase
+from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
@@ -150,6 +152,7 @@ class Table(TableBase):
                 region_name=AWS_DEFAULT_REGION
             )
         )
+        self.key_attrs = get_key_attrs(self.config)
         self.table = self.session.resource('dynamodb').Table(name)
 
     @dynamodb_ex_handler()
@@ -178,26 +181,55 @@ class Table(TableBase):
     def put_item(
         self, item:
         t.Dict,
-        user: t.Optional[str] = None
-    ):
-        if user:
-            item = add_audit(item, user)
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
+    ) -> t.Dict:
+        if audit_user:
+            item = add_audit(item, update or False, audit_user)
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
         if _item:
             item = _item[0]
         item = kms_encrypt_item(self.config, item)
-        self.table.put_item(Item=item)
+
+        # do update
+        if update is True:
+            validate_key_attrs(self.key_attrs, item)
+            kwargs = {
+                'Key': {k: item.pop(k) for k in self.key_attrs},
+                'ReturnValues': 'ALL_NEW'
+            }
+            exp = []
+            vals = {}
+            aliases = {}
+            for k, v in sorted(item.items()):
+                if isinstance(v, str) and v == '':
+                    v = None
+                aliases['#%s' % k] = k
+                exp.append('#%s = :%s' % (k, k))
+                vals[':%s' % k] = v
+            kwargs['UpdateExpression'] = 'set %s' % ', '.join(exp)
+            kwargs['ExpressionAttributeNames'] = aliases
+            kwargs['ExpressionAttributeValues'] = vals
+            response = self.table.update_item(**kwargs)
+            item.update(response.get('Attributes'))
+
+        # do create/replace
+        else:
+            self.table.put_item(Item=item)
+
         self.pm.hook.put_item_post(table=self.name, item=item)
+        return item
 
     @dynamodb_ex_handler()
     def put_items(
         self,
         items: t.Iterable[t.Dict],
-        user: t.Optional[str] = None
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
     ):
         # TODO(batch)
         for item in items:
-            self.put_item(item, user)
+            self.put_item(item, update=update, audit_user=audit_user)
         self.pm.hook.put_items_post(table=self.name, items=items)
 
     @dynamodb_ex_handler()

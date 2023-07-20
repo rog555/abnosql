@@ -134,14 +134,20 @@ class TableBase(metaclass=ABCMeta):
     def put_item(
         self,
         item: t.Dict,
-        user: t.Optional[str] = None
-    ):
+        update: t.Optional[bool] = False,
+        audit_user: t.Optional[str] = None
+    ) -> t.Dict:
         """Puts table/collection item
 
         Args:
 
             item: dictionary
-            user: optional user / system ID string to add audit atts
+            update: perform update/patch - item must already exist
+            audit_user: optional user / system ID string to add audit attrs
+
+        Returns:
+
+            item: dictionary of created/updated item
 
         """
         pass
@@ -150,6 +156,7 @@ class TableBase(metaclass=ABCMeta):
     def put_items(
         self,
         items: t.Iterable[t.Dict],
+        update: t.Optional[bool] = False,
         audit_user: t.Optional[str] = None
     ):
         """Puts multiple table/collection items
@@ -157,7 +164,8 @@ class TableBase(metaclass=ABCMeta):
         Args:
 
             items: list of item dictionaries
-            user: user / system ID string to add audit attrs
+            update: perform update/patch - items must already exist
+            audit_user: user / system ID string to add audit attrs
 
         """
         pass
@@ -310,6 +318,54 @@ def validate_statement(statement: str):
         raise ex.ValidationException('statement must start with SELECT')
 
 
+def get_key_attrs(config: t.Optional[t.Dict] = None) -> list:
+    """Get key attributes from ABNOSQL_KEY_ATTRS env var or config
+
+    Args:
+
+        config: config dict
+
+    Returns:
+
+        key_attrs: list of key attribute names
+
+    """
+    key_attrs = [
+        _ for _ in os.environ.get('ABNOSQL_KEY_ATTRS', '').split(',')
+        if _.strip() != ''
+    ]
+    _key_attrs = config.get('key_attrs') if isinstance(config, dict) else None
+    if isinstance(_key_attrs, list):
+        key_attrs = _key_attrs
+    if len(key_attrs) > 2:
+        raise ValueError('must not be more than 2 key_attrs defined')
+    return key_attrs
+
+
+def validate_key_attrs(key_attrs: t.Iterable[str], item: t.Dict):
+    """Validate key attributes in either ABNOSQL_KEY_ATTRS env var or config
+
+    Args:
+
+        key_attrs: list of key attribute names
+        config: config dict
+
+    """
+    if not isinstance(key_attrs, list) or len(key_attrs) == 0:
+        raise ex.ValidationException('key_attrs not defined')
+    missing = [
+        k for k in key_attrs if item.get(k) is None
+    ]
+    if len(missing):
+        raise ex.ValidationException(
+            f'key_attrs missing from item: {missing}'
+        )
+    if len(item) - len(key_attrs) <= 0:
+        raise ex.ValidationException(
+            'item contains no additional keys beyond key_attrs'
+        )
+
+
 def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
     """Encrypt item values as defined in config
 
@@ -420,12 +476,13 @@ def kms_process_query_items(
     return _items
 
 
-def add_audit(item: t.Dict, user: str) -> t.Dict:
-    """Add created_by + created_date and/or modified_by + modified_date to item
+def add_audit(item: t.Dict, update: bool, user: str) -> t.Dict:
+    """Add createdBy + createdDate and/or modifiedBy + modifiedDate to item
 
     Args:
 
         item: item dict
+        update: bool, true if operation is update otherwise false
         user: user/system ID string
 
     Returns:
@@ -436,7 +493,7 @@ def add_audit(item: t.Dict, user: str) -> t.Dict:
     by_attr = 'By' if camel_case else '_by'
     date_attr = 'Date' if camel_case else '_date'
     dt_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    if f'created{by_attr}' not in item:
+    if update is not True and f'created{by_attr}' not in item:
         item.update({
             f'created{by_attr}': user,
             f'created{date_attr}': dt_iso
@@ -509,6 +566,9 @@ def table(
             provider = defaults.get(database)
         _kms_module = kms(kcfg, provider)
         config['kms']['pm'] = _kms_module
+
+        if 'key_attrs' not in kcfg:
+            config['kms']['key_attrs'] = get_key_attrs(config)
 
         if 'session' in config and 'session' not in kcfg:
             # aws_encryption_sdk uses botocore session

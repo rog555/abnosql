@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.5] - 2023-07-20
+
+- patch/update support
+
 ## [v0.0.4] - 2023-07-20
 
 - infer ABNOSQL_DB and audit camelCase
