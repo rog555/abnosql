@@ -118,7 +118,7 @@ def delete_item(table, partition_key, id_key, database, config):
 
 @click.command()
 @click.argument('table')
-@click.argument('partition-key')
+@click.option('--partition-key', '-p')
 @click.option('--id-key', '-k')
 @click.option('--filters', '-f')
 @click.option('--database', '-d')
@@ -126,7 +126,7 @@ def delete_item(table, partition_key, id_key, database, config):
 def query(table, partition_key, id_key, filters, database, config):
     tb = _table(table, get_config(config), database=database)
     dump(tb.query(
-        key=get_key(partition_key, id_key),
+        key=get_key(partition_key, id_key) if partition_key else None,
         filters=parse_dict_arg(filters)
     )['items'])
 

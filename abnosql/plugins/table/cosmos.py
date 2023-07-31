@@ -1,5 +1,7 @@
 import functools
+import logging
 import os
+
 import typing as t
 
 import pluggy  # type: ignore
@@ -203,14 +205,16 @@ class Table(TableBase):
             f'@{k}': v
             for k, v in filters.items()
         }
+        # cosmos doesnt like hyphens in table names
+        table_alias = 'c' if '-' in self.name else self.name
         parameters.update({
             f'@{k}': v
             for k, v in key.items()
         })
-        statement = f'SELECT * FROM {self.name}'
+        statement = f'SELECT * FROM {table_alias}'
         op = 'WHERE'
         for param in parameters.keys():
-            statement += f' {op} {self.name}.{param[1:]} = {param}'
+            statement += f' {op} {table_alias}.{param[1:]} = {param}'
             op = 'AND'
 
         resp = self.query_sql(
@@ -258,6 +262,7 @@ class Table(TableBase):
             and ' LIMIT ' not in statement.upper()
         ):
             kwargs['query'] += f' OFFSET {next} LIMIT {limit}'
+        logging.debug(f'query_sql() table: {self.name}, kwargs: {kwargs}')
         container = self._container(self.name)
         items = list(container.query_items(**kwargs))
         headers = container.client_connection.last_response_headers

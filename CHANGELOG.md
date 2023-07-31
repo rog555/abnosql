@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.6] - 2023-07-31
+
+- cosmos support for table names containing hyphens
+
 ## [v0.0.5] - 2023-07-20
 
 - patch/update support

@@ -3,6 +3,7 @@ from base64 import b64encode
 from datetime import datetime
 import functools
 import json
+import logging
 import os
 import typing as t
 
@@ -255,8 +256,10 @@ class Table(TableBase):
             kwargs['Limit'] = limit
         response = None
         if key is not None:
+            logging.debug(f'query() table: {self.name}, query kwargs: {kwargs}')
             response = self.table.query(**kwargs)
         else:
+            logging.debug(f'query() table: {self.name}, scan kwargs: {kwargs}')
             response = self.table.scan(**kwargs)
         items = response.get('Items', [])
         items = kms_process_query_items(self.config, items)
@@ -291,6 +294,7 @@ class Table(TableBase):
         if len(params):
             kwargs['Parameters'] = params
 
+        logging.debug(f'query_sql() table: {self.name}, kwargs: {kwargs}')
         response = client.execute_statement(**kwargs)
         items = []
         _items = response.get('Items', [])
