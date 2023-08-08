@@ -102,7 +102,8 @@ def serialize_dynamodb_type(var, val):
 def get_dynamodb_kwargs(
     name: str,
     key: t.Optional[t.Dict[str, t.Any]] = None,
-    filters: t.Optional[t.Dict[str, t.Any]] = None
+    filters: t.Optional[t.Dict[str, t.Any]] = None,
+    index: t.Optional[str] = None
 ) -> t.Dict:
     key = key or {}
     if len(key) > 2:
@@ -125,6 +126,8 @@ def get_dynamodb_kwargs(
         'TableName': name,
         'Select': 'ALL_ATTRIBUTES'
     }
+    if index is not None:
+        kwargs['IndexName'] = index
     if len(key):
         kwargs['KeyConditionExpression'] = ' AND '.join([
             f'{k} = :{k}' for k in key.keys()
@@ -245,10 +248,11 @@ class Table(TableBase):
         key: t.Optional[t.Dict[str, t.Any]] = None,
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
-        next: t.Optional[str] = None
+        next: t.Optional[str] = None,
+        index: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         kwargs = get_dynamodb_kwargs(
-            self.name, key, filters
+            self.name, key, filters=filters, index=index
         )
         if next is not None:
             kwargs['ExclusiveStartKey'] = json.loads(b64decode(next).decode())

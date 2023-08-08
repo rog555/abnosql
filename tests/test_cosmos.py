@@ -1,8 +1,10 @@
 from base64 import b64encode
 import os
 
+import pytest
 import responses  # type: ignore
 
+import abnosql.exceptions as ex
 from abnosql.mocks import mock_cosmos
 from abnosql.mocks.mock_cosmos import set_keyattrs
 from abnosql.plugins.table.memory import clear_tables
@@ -21,6 +23,15 @@ def setup_cosmos():
         'mycredential'.encode('utf-8')
     ).decode()
     os.environ['ABNOSQL_COSMOS_DATABASE'] = 'bar'
+
+
+@mock_cosmos
+@responses.activate
+def test_exceptions():
+    os.environ.pop('ABNOSQL_DB', None)
+    with pytest.raises(ex.ConfigException) as e:
+        cmn.test_get_item()
+    assert 'Unable to locate credentials' in str(e.value)
 
 
 @mock_cosmos

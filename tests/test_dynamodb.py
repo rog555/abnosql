@@ -2,7 +2,10 @@ import os
 
 import boto3  # type: ignore
 from moto import mock_dynamodb  # type: ignore
+import pytest
 
+from abnosql import table
+import abnosql.exceptions as ex
 from abnosql.mocks import mock_dynamodbx
 from tests import common as cmn
 
@@ -38,6 +41,15 @@ def setup_dynamodb(set_region=False):
         os.environ['ABNOSQL_DB'] = 'dynamodb'
     create_table('hash_range', True)
     create_table('hash_only', False)
+
+
+@mock_dynamodb
+def test_exceptions():
+    os.environ.pop('ABNOSQL_DB', None)
+    tb = table('notfound')
+    with pytest.raises(ex.NotFoundException) as e:
+        tb.get_item(hk='1')
+    assert 'NotFoundException' in str(e.value)
 
 
 @mock_dynamodb

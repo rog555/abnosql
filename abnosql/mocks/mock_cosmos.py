@@ -51,7 +51,9 @@ def mock_cosmos(f):
 
         def _response(code=404, body=None, _headers=None):
             return (
-                code, _headers or {}, json.dumps({
+                code, _headers or {
+                    'Content-Type': 'application/json'
+                }, json.dumps({
                     "Errors": [
                         "Resource Not Found. "
                         "Learn more: https://aka.ms/cosmosdb-tsg-not-found"

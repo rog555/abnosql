@@ -2,7 +2,6 @@ import os
 import typing as t
 
 import pluggy  # type: ignore
-
 from abnosql import plugin
 from abnosql import table
 

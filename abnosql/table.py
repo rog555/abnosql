@@ -186,7 +186,8 @@ class TableBase(metaclass=ABCMeta):
         key: t.Optional[t.Dict[str, t.Any]] = None,
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
-        next: t.Optional[str] = None
+        next: t.Optional[str] = None,
+        index: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         """Perform key based query with optional exact match filters
 
@@ -196,6 +197,7 @@ class TableBase(metaclass=ABCMeta):
             filters: optional dictionary of key=value to query and filter on
             limit: query limit
             next: pagination token
+            index: name of index to use (dynamodb only)
 
         Returns:
             dictionary containing 'items' and 'next' pagination token
@@ -550,6 +552,10 @@ def table(
     module = pm.get_plugin(database)
     if module is None:
         raise ex.PluginException(f'table.{database} plugin not found')
+    if hasattr(module, 'MISSING_DEPS'):
+        raise ex.PluginException(
+            f'table.{database} plugin missing dependencies'
+        )
     if not isinstance(config, dict):
         config = {}
     _module = module.Table(pm, name, config)
@@ -577,7 +583,7 @@ def table(
         # check required attrs
         missing = [
             _ for _ in ['attrs', 'key_attrs']
-            if not isinstance(kcfg[_], list) or len(kcfg[_]) == 0
+            if not isinstance(kcfg.get(_), list) or len(kcfg[_]) == 0
         ]
         if len(missing):
             raise ex.ConfigException(

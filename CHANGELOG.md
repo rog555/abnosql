@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.7] - 2023-08-08
+
+- delay requiring dependencies until loading, index support for query()
+
 ## [v0.0.6] - 2023-07-31
 
 - cosmos support for table names containing hyphens

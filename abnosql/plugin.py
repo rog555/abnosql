@@ -6,8 +6,6 @@ import typing as t
 
 import pluggy  # type: ignore
 
-from abnosql.exceptions import PluginException
-
 
 PKG_ROOT = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = os.path.basename(PKG_ROOT)
@@ -94,10 +92,6 @@ def get_pm(
     for info in iter_modules([os.path.join(PKG_ROOT, 'plugins', entity)]):
         path = f'{PKG_NAME}.plugins.{entity}.{info.name}'
         module = import_module(path)
-        if hasattr(module, 'MISSING_DEPS'):
-            raise PluginException(
-                f'plugin {path} missing required dependencies'
-            )
         pm.register(plugin=module, name=info.name)
 
     pm.load_setuptools_entrypoints(f'{PKG_NAME}.{entity}')

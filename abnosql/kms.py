@@ -119,4 +119,8 @@ def kms(
     module = pm.get_plugin(provider)
     if module is None:
         raise ex.PluginException(f'kms.{provider} plugin not found')
+    if hasattr(module, 'MISSING_DEPS'):
+        raise ex.PluginException(
+            f'kms.{provider} plugin missing dependencies'
+        )
     return module.Kms(pm, config)

@@ -231,7 +231,8 @@ class Table(TableBase):
         key: t.Dict[str, t.Any],
         filters: t.Optional[t.Dict[str, t.Any]] = None,
         limit: t.Optional[int] = None,
-        next: t.Optional[str] = None
+        next: t.Optional[str] = None,
+        index: t.Optional[str] = None
     ) -> t.Dict[str, t.Any]:
         filters = filters or {}
         validate_query_attrs(key, filters)
