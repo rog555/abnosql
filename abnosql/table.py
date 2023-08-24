@@ -491,7 +491,7 @@ def add_audit(item: t.Dict, update: bool, user: str) -> t.Dict:
         item
 
     """
-    camel_case = os.environ.get('ABNOSQL_AUDIT_CAMELCASE', 'TRUE') == 'TRUE'
+    camel_case = os.environ.get('ABNOSQL_CAMELCASE', 'TRUE') == 'TRUE'
     by_attr = 'By' if camel_case else '_by'
     date_attr = 'Date' if camel_case else '_date'
     dt_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -503,6 +503,35 @@ def add_audit(item: t.Dict, update: bool, user: str) -> t.Dict:
     item.update({
         f'modified{by_attr}': user,
         f'modified{date_attr}': dt_iso
+    })
+    return item
+
+
+def add_change_meta(item: t.Dict, event_source: str, event_name: str) -> t.Dict:
+    """Add changeMetadata object to item containing eventName and eventSource
+
+    Args:
+
+        item: item dict
+        event_source: str
+        event_name: str - INSERT, UPDATE or DELETE
+
+    Returns:
+        item
+
+    """
+    event_name = event_name.upper()
+    if event_name not in ['INSERT', 'UPDATE', 'DELETE']:
+        return item
+    camel_case = os.environ.get('ABNOSQL_CAMELCASE', 'TRUE') == 'TRUE'
+    meta_attr = 'changeMetadata' if camel_case else 'change_metadata'
+    source_attr = 'eventSource' if camel_case else 'event_source'
+    name_attr = 'eventName' if camel_case else 'event_name'
+    item.update({
+        meta_attr: {
+            source_attr: event_source,
+            name_attr: event_name
+        }
     })
     return item
 

@@ -1,6 +1,7 @@
 import functools
 import logging
 import os
+import time
 
 import typing as t
 
@@ -9,6 +10,7 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import add_change_meta
 from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
@@ -82,6 +84,11 @@ class Table(TableBase):
         self.set_config(config)
         self.key_attrs = get_key_attrs(self.config)
         self.database_client = None
+        # enabled by default
+        self.change_meta = self.config.get(
+            'cosmos_change_meta',
+            os.environ.get('ABNOSQL_COSMOS_CHANGE_META', 'TRUE') == 'TRUE'
+        )
 
     @cosmos_ex_handler()
     def set_config(self, config: t.Optional[dict]):
@@ -147,6 +154,13 @@ class Table(TableBase):
     ) -> t.Dict:
         if audit_user:
             item = add_audit(item, update or False, audit_user)
+
+        # add change metadata if enabled
+        if self.change_meta is True:
+            item = add_change_meta(
+                item, self.name, 'UPDATE' if update is True else 'INSERT'
+            )
+
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
         if _item:
             item = _item[0]
@@ -185,6 +199,21 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def delete_item(self, **kwargs):
+
+        # if change metadata enabled do update first then delete
+        if self.change_meta is True:
+            item = add_change_meta(
+                dict(**kwargs), self.name, 'DELETE'
+            )
+            self.put_item(item, update=False)
+            # sleep defined number of milliseconds to allow time between
+            # update then delete events if needed (if this is an issue)
+            sleep_ms = int(os.environ.get(
+                'ABNOSQL_COSMOS_CHANGE_META_SLEEPMS', '0'
+            ))
+            if sleep_ms > 0:
+                time.sleep(sleep_ms / 1000)
+
         self._container(self.name).delete_item(
             **get_key_kwargs(**kwargs)
         )

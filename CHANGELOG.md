@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.8] - 2023-08-24
+
+- add cosmos change feed support via ABNOSQL_COSMOS_CHANGE_META env var
+
 ## [v0.0.7] - 2023-08-08
 
 - delay requiring dependencies until loading, index support for query()

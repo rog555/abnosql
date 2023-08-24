@@ -1,5 +1,6 @@
 import functools
 import json
+import re
 import typing as t
 
 import pluggy  # type: ignore
@@ -51,6 +52,10 @@ def get_table_count(name: str) -> int:
     return len(list(TABLES.get(name, {}).values()))
 
 
+def camel_snake(val: str) -> str:
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', val).lower()
+
+
 def query_items(
     statement: str,
     items: t.List[t.Dict[str, t.Any]],
@@ -81,15 +86,23 @@ def query_items(
         table_name = get_table_name(statement)
 
     # sqlglot execute can't handle dict or list keys...
+    # also doesnt like camelCase attribute names because expects them to be
+    # lower case, so detect and convert to snake case
     _items = []
     _unpack = {}
+    _camel = {}
     for item in items:
-        new_item = item.copy()
-        for k in item.keys():
-            v = item[k]
+        new_item = {}
+        for camel in item.keys():
+            # convert camel to snake
+            snake = camel_snake(camel)
+            if snake != camel:
+                _camel[snake] = camel
+            v = item[camel]
             if type(v) in [dict, list]:
-                _unpack[k] = True
-                new_item[k] = json.dumps(v)
+                _unpack[camel] = True
+                v = json.dumps(v)
+            new_item[snake] = v
         _items.append(new_item)
 
     # get any offset supplied
@@ -114,12 +127,17 @@ def query_items(
         for row in resp.rows
     ]
 
+    # convert snake back to camel
+    if len(_camel):
+        for i in range(len(rows)):
+            for snake, camel in _camel.items():
+                rows[i][camel] = rows[i].pop(snake, None)
+
     # unpack
     if len(_unpack):
         for i in range(len(rows)):
             for k in _unpack.keys():
                 rows[i][k] = json.loads(rows[i][k])
-
     return rows
 
 

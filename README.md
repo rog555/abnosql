@@ -19,9 +19,10 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [Indexes](#indexes)
   - [Updates](#updates)
   - [Partition Keys](#partition-keys)
-  - [Client Side Encryption](#client-side-encryption)
   - [Pagination](#pagination)
   - [Audit](#audit)
+  - [Change Feed / Stream Support](#change-feed--stream-support)
+  - [Client Side Encryption](#client-side-encryption)
 - [Configuration](#configuration)
   - [AWS DynamoDB](#aws-dynamodb)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql)
@@ -120,8 +121,10 @@ Care should be taken with `query_sql()` to not to use SQL features that are spec
 
 ## Indexes
 
-Beyond partition and range keys defined on the table, indexes are not currently supported - and these will likey differ between providers anyway (eg DynamoDB supports [Secondary Indexes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html), whereas [Cosmos](https://learn.microsoft.com/en-us/azure/cosmos-db/index-overview) has Range, Spatial and Composite.
+Beyond partition and range keys defined on the table, indexes currently have limited support within abnosql
 
+ - The DynamoDB implemention of `query()` allows a [secondary index](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html) to be specified via optional `index` kwarg
+ - [Cosmos](https://learn.microsoft.com/en-us/azure/cosmos-db/index-overview) has Range, Spatial and Composite indexes, however the abnosql library does not do anything yet with `index` kwarg in `query()` implementation.
 
 ## Updates
 
@@ -138,6 +141,53 @@ All items being updated must actually exist first, or else exception raised
 ## Partition Keys
 
 A few methods such as `get_item()`, `delete_item()` and `query()` need to know partition/hash keys as defined on the table.  To avoid having to configure this or lookup from the provider, the convention used is that the first kwarg or dictionary item is the partition key, and if supplied the 2nd is the range/sort key.
+
+## Pagination
+
+`query` and `query_sql` accept `limit` and `next` optional kwargs and return `next` in response. Use these to paginate.
+
+This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
+
+## Audit
+
+`put_item()` and `put_items()` take an optional `audit_user` kwarg.  If supplied, absnosql will add the following to the item:
+
+- `createdBy` - value of `audit_user`, added if does not exist in item supplied to put_item()
+- `createdDate` - UTC ISO timestamp string, added if does not exist
+- `modifiedBy` - value of `audit_user` always added
+- `modifiedDate` - UTC ISO timestamp string, always added
+
+NOTE: created* will only be added if `update` is not True in a `put_item()` operation
+
+If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_CAMELCASE` = `FALSE`
+
+## Change Feed / Stream Support
+
+**AWS DynamoDB** [Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html) allow Lambda functions to be triggered upon create, update and delete table operations.  The event sent to the lambda (see [aws docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.Tutorial2.html)) contains `eventName` and `eventSource`, where:
+
+- `eventName` - name of event, eg `INSERT`, `UPDATE` or `DELETE`
+- `eventSource` - ARN of the table name
+
+This allows a single stream processor lambda to process events from multiple tables (eg for writing into ElasticSearch)
+
+Like DynamoDB, **Azure CosmosDB** supports [change feeds](https://learn.microsoft.com/en-us/azure/cosmos-db/change-feed), however the event sent to the function (currently) omits the event source (table name) and only delete event names are available if a [preview change feed mode](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html) is enabled, which needs explicit enablement for.
+
+Because both the eventName and eventSource are ideally needed (irrespective of preview mode or not), abnosql library automatically adds the `changeMetadata` to an item during create, update and delete, eg:
+
+```
+item = {
+    "hk": "1",
+    "rk": "a",
+    "changeMetadata": {
+        "eventType": "INSERT",
+        "eventSource": "sometable"
+    }
+}
+```
+
+Because no DELETE event is sent at all without preview change feed mode above - abnosql must first update the item, and then delete it.  This is also needed for the eventSource / table name to be captured in the event, so unfortunately until Cosmos supports both attributes, update is needed before a delete
+
+This behaviour is enabled by default, however can be disabled by setting `ABNOSQL_COSMOS_CHANGE_META` env var to `FALSE` or `cosmos_change_meta=False` in table config.  `ABNOSQL_CAMELCASE` = `FALSE` env var can also be used to change attribute names used to snake_case if needed
 
 ## Client Side Encryption
 
@@ -190,26 +240,6 @@ The encryption context / AAD is set to hk=1 and rk=b and obj and str values are 
 If you don't want to use any of these providers, then you can use `put_item_pre` and `get_item_post` hooks to perform your own client side encryption
 
 See also [AWS Multi-region encryption keys](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/configure.html#config-mrks) and set `ABNOSQL_KMS_KEYS` env var as comma list of ARNs
-
-
-## Pagination
-
-`query` and `query_sql` accept `limit` and `next` optional kwargs and return `next` in response. Use these to paginate.
-
-This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
-
-## Audit
-
-`put_item()` and `put_items()` take an optional `audit_user` kwarg.  If supplied, absnosql will add the following to the item:
-
-- `createdBy` - value of `audit_user`, added if does not exist in item supplied to put_item()
-- `createdDate` - UTC ISO timestamp string, added if does not exist
-- `modifiedBy` - value of `audit_user` always added
-- `modifiedDate` - UTC ISO timestamp string, always added
-
-NOTE: created* will only be added if `update` is not True in a `put_item()` operation
-
-If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_AUDIT_CAMELCASE` = `FALSE`
 
 # Configuration
 
@@ -287,7 +317,7 @@ See the [TableSpecs](https://github.com/rog555/abnosql/blob/main/abnosql/table.p
 
 Use `moto` package and `abnosql.mocks.mock_dynamodbx` 
 
-mock_dynamodbx is used for query_sql and only needed if/until moto provides better partiql support
+mock_dynamodbx is used for query_sql and only needed if/until moto provides full partiql support
 
 Example:
 

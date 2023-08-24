@@ -34,25 +34,56 @@ def items(hks=None, rks=None):
     return _items
 
 
+def validate_change_meta(item, event_name):
+    if os.environ.get('ABNOSQL_COSMOS_CHANGE_META', 'TRUE') != 'TRUE':
+        return item
+    _item = item.copy()
+    change_meta = _item.pop('changeMetadata', None)
+    database = os.environ.get('ABNOSQL_DB')
+    if database is not None and database.startswith('cosmos'):
+        assert isinstance(change_meta, dict)
+        assert change_meta.get('eventSource', '').startswith('hash_')
+        assert change_meta.get('eventName') == event_name
+    else:
+        assert change_meta is None
+    return _item
+
+
+def validate_change_meta_response(response, event_name):
+    for i in range(len(response['items'])):
+        response['items'][i] = validate_change_meta(
+            response['items'][i], event_name
+        )
+    return response
+
+
 def test_get_item(config=None, tables=None):
+    actual_item = None
     if tables is None or 'hash_range' in tables:
         tb = table('hash_range', config)
         assert tb.get_item(hk='1', rk='a') is None
         tb.put_item(item('1', 'a'))
-        assert tb.get_item(hk='1', rk='a') == item('1', 'a')
+        actual_item = tb.get_item(hk='1', rk='a')
+        expected_item = item('1', 'a')
+        actual_item = validate_change_meta(actual_item, 'INSERT')
+        assert actual_item == expected_item
 
     if tables is None or 'hash_only' in tables:
         tb = table('hash_only', config)
         assert tb.get_item(hk='1') is None
         tb.put_item(item('1'))
-        assert tb.get_item(hk='1') == item('1')
+        actual_item = tb.get_item(hk='1')
+        expected_item = item('1')
+        actual_item = validate_change_meta(actual_item, 'INSERT')
+        assert actual_item == expected_item
 
 
 def test_put_item(config=None):
     tb = table('hash_range', config)
     assert tb.get_item(hk='1', rk='a') is None
     tb.put_item(item('1', 'a'))
-    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
+    actual_item = validate_change_meta(tb.get_item(hk='1', rk='a'), 'INSERT')
+    assert actual_item == item('1', 'a')
 
 
 def test_put_item_audit(config=None):
@@ -66,6 +97,7 @@ def test_put_item_audit(config=None):
     assert item1['modifiedBy'] == 'foo'
     assert item1['createdDate'].startswith('20')
     assert item1['modifiedDate'] == item1['createdDate']
+    validate_change_meta(item1, 'INSERT')
 
     item2 = tb.put_item(
         {'hk': '1', 'rk': 'a', 'str': 'STR'},
@@ -77,6 +109,8 @@ def test_put_item_audit(config=None):
     assert item2['createdDate'] == item1['createdDate']
     assert item2['modifiedDate'] >= item2['createdDate']
     assert item2['str'] == 'STR'
+
+    validate_change_meta(item2, 'UPDATE')
     os.environ.pop('ABNOSQL_KEY_ATTRS')
 
 
@@ -86,27 +120,39 @@ def test_update_item(config=None):
     tb = table('hash_range', config)
     item1 = item('1', 'a')
     assert tb.get_item(hk='1', rk='a') is None
-    assert tb.put_item(item1) == item1
-    assert tb.get_item(hk='1', rk='a') == item1
+    assert validate_change_meta(
+        tb.put_item(item1.copy()), 'INSERT'
+    ) == item1
+    assert validate_change_meta(
+        tb.get_item(hk='1', rk='a'), 'INSERT'
+    ) == item1
 
     # test update
     item2 = {'hk': '1', 'rk': 'a', 'str': 'STR', 'num': 6}
     item3 = item1.copy()
     item3.update(item2)
-    assert tb.put_item(item2, update=True) == item3
-    assert tb.get_item(hk='1', rk='a') == item3
+    assert validate_change_meta(
+        tb.put_item(item2.copy(), update=True), 'UPDATE'
+    ) == item3
+    assert validate_change_meta(
+        tb.get_item(hk='1', rk='a'), 'UPDATE'
+    ) == item3
 
 
 def test_put_items(config=None):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))
-    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
+    validate_change_meta(
+        tb.get_item(hk='1', rk='a'), 'INSERT'
+    ) == item('1', 'a')
 
 
 def test_delete_item(config=None):
     tb = table('hash_range', config)
     tb.put_item(item('1', 'a'))
-    assert tb.get_item(hk='1', rk='a') == item('1', 'a')
+    assert validate_change_meta(
+        tb.get_item(hk='1', rk='a'), 'INSERT'
+    ) == item('1', 'a')
     tb.delete_item(hk='1', rk='a')
     assert tb.get_item(hk='1', rk='a') is None
 
@@ -187,6 +233,7 @@ def test_query(config=None, return_response=False):
     )
     if return_response is True:
         return response
+    response = validate_change_meta_response(response, 'INSERT')
     assert response == {
         'items': items(['1'], ['a']),
         'next': None
@@ -203,6 +250,7 @@ def test_query_sql(config=None, return_response=False):
     )
     if return_response is True:
         return response
+    validate_change_meta_response(response, 'INSERT')
     assert response == {
         'items': items(['1'], ['a', 'b']),
         'next': None
@@ -213,6 +261,7 @@ def test_query_scan(config=None):
     tb = table('hash_range', config)
     tb.put_items(items(['1', '2'], ['a', 'b']))
     response = tb.query()
+    response = validate_change_meta_response(response, 'INSERT')
     assert response['items'] == items(['1', '2'], ['a', 'b'])
 
 
