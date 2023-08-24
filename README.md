@@ -163,10 +163,10 @@ If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_CAMELCASE`
 
 ## Change Feed / Stream Support
 
-**AWS DynamoDB** [Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html) allow Lambda functions to be triggered upon create, update and delete table operations.  The event sent to the lambda (see [aws docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.Tutorial2.html)) contains `eventName` and `eventSource`, where:
+**AWS DynamoDB** [Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html) allow Lambda functions to be triggered upon create, update and delete table operations.  The event sent to the lambda (see [aws docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.Lambda.Tutorial2.html)) contains `eventName` and `eventSourceARN`, where:
 
 - `eventName` - name of event, eg `INSERT`, `UPDATE` or `DELETE`
-- `eventSource` - ARN of the table name
+- `eventSourceARN` - ARN of the table name
 
 This allows a single stream processor lambda to process events from multiple tables (eg for writing into ElasticSearch)
 
@@ -179,7 +179,7 @@ item = {
     "hk": "1",
     "rk": "a",
     "changeMetadata": {
-        "eventType": "INSERT",
+        "eventName": "INSERT",
         "eventSource": "sometable"
     }
 }
@@ -188,6 +188,8 @@ item = {
 Because no DELETE event is sent at all without preview change feed mode above - abnosql must first update the item, and then delete it.  This is also needed for the eventSource / table name to be captured in the event, so unfortunately until Cosmos supports both attributes, update is needed before a delete
 
 This behaviour is enabled by default, however can be disabled by setting `ABNOSQL_COSMOS_CHANGE_META` env var to `FALSE` or `cosmos_change_meta=False` in table config.  `ABNOSQL_CAMELCASE` = `FALSE` env var can also be used to change attribute names used to snake_case if needed
+
+To write an Azure Function / AWS Lambda that is able to process both DynamoDB and Cosmos events, look for `changeMetadata` first and if present use that otherwise look for `eventName` and `eventSourceARN` in the event payload assuming its DynamoDB
 
 ## Client Side Encryption
 
