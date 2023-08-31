@@ -42,7 +42,7 @@ def get_pm(
     entity: str,
     prefix: t.Optional[str] = None,
     nocache: t.Optional[bool] = False
-) -> PM:
+) -> pluggy.PluginManager:
     """Generic pluggy loader for loading specs, hooks and plugins
 
     plugins/hooks etc loaded into {mypkg}.{entity} namespace

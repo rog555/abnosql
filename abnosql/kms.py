@@ -115,6 +115,10 @@ def kms(
     """
     if provider is None:
         provider = os.environ.get('ABNOSQL_KMS')
+
+    if provider is None:
+        raise ex.PluginException('kms plugin provider not defined')
+
     pm = plugin.get_pm('kms')
     module = pm.get_plugin(provider)
     if module is None:

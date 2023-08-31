@@ -577,6 +577,9 @@ def table(
                 database = _database
                 break
 
+    if database is None:
+        raise ex.PluginException('table plugin database not defined')
+
     pm = plugin.get_pm('table')
     module = pm.get_plugin(database)
     if module is None:
