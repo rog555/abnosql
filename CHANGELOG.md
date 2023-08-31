@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.9] - 2023-08-31
+
+- cosmos change feed eventName to INSERT, MODIFY or REMOVE
+
 ## [v0.0.8] - 2023-08-24
 
 - add cosmos change feed support via ABNOSQL_COSMOS_CHANGE_META env var

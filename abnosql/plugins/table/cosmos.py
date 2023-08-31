@@ -158,7 +158,7 @@ class Table(TableBase):
         # add change metadata if enabled
         if self.change_meta is True:
             item = add_change_meta(
-                item, self.name, 'UPDATE' if update is True else 'INSERT'
+                item, self.name, 'MODIFY' if update is True else 'INSERT'
             )
 
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
@@ -203,7 +203,7 @@ class Table(TableBase):
         # if change metadata enabled do update first then delete
         if self.change_meta is True:
             item = add_change_meta(
-                dict(**kwargs), self.name, 'DELETE'
+                dict(**kwargs), self.name, 'REMOVE'
             )
             self.put_item(item, update=False)
             # sleep defined number of milliseconds to allow time between

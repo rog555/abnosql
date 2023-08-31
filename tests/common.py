@@ -110,7 +110,7 @@ def test_put_item_audit(config=None):
     assert item2['modifiedDate'] >= item2['createdDate']
     assert item2['str'] == 'STR'
 
-    validate_change_meta(item2, 'UPDATE')
+    validate_change_meta(item2, 'MODIFY')
     os.environ.pop('ABNOSQL_KEY_ATTRS')
 
 
@@ -132,10 +132,10 @@ def test_update_item(config=None):
     item3 = item1.copy()
     item3.update(item2)
     assert validate_change_meta(
-        tb.put_item(item2.copy(), update=True), 'UPDATE'
+        tb.put_item(item2.copy(), update=True), 'MODIFY'
     ) == item3
     assert validate_change_meta(
-        tb.get_item(hk='1', rk='a'), 'UPDATE'
+        tb.get_item(hk='1', rk='a'), 'MODIFY'
     ) == item3
 
 

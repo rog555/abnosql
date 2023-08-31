@@ -514,14 +514,14 @@ def add_change_meta(item: t.Dict, event_source: str, event_name: str) -> t.Dict:
 
         item: item dict
         event_source: str
-        event_name: str - INSERT, UPDATE or DELETE
+        event_name: str - INSERT, MODIFY or REMOVE
 
     Returns:
         item
 
     """
     event_name = event_name.upper()
-    if event_name not in ['INSERT', 'UPDATE', 'DELETE']:
+    if event_name not in ['INSERT', 'MODIFY', 'REMOVE']:
         return item
     camel_case = os.environ.get('ABNOSQL_CAMELCASE', 'TRUE') == 'TRUE'
     meta_attr = 'changeMetadata' if camel_case else 'change_metadata'
