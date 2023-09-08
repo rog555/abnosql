@@ -205,6 +205,7 @@ class Table(TableBase):
             item = add_change_meta(
                 dict(**kwargs), self.name, 'REMOVE'
             )
+            # set update to False because would need key attrs defined if True
             self.put_item(item, update=False)
             # sleep defined number of milliseconds to allow time between
             # update then delete events if needed (if this is an issue)
