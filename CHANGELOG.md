@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.11] - 2023-09-12
+- fix change metadata REMOVE bug
+  
 ## [v0.0.10] - 2023-09-08
 - fix change metadata REMOVE bug
 

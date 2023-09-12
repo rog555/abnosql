@@ -528,7 +528,7 @@ def add_change_meta(item: t.Dict, event_source: str, event_name: str) -> t.Dict:
     source_attr = 'eventSource' if camel_case else 'event_source'
     name_attr = 'eventName' if camel_case else 'event_name'
     # cosmos delete_item() adds REMOVE so don't add if already present in item
-    existing_event = item.get(meta_attr, {}).get(event_name)
+    existing_event = item.get(meta_attr, {}).get(name_attr)
     if existing_event == 'REMOVE':
         return item
     item.update({
