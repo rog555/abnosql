@@ -207,13 +207,15 @@ class Table(TableBase):
             )
             # set update to False because would need key attrs defined if True
             self.put_item(item, update=False)
-            # sleep defined number of milliseconds to allow time between
-            # update then delete events if needed (if this is an issue)
-            sleep_ms = int(os.environ.get(
-                'ABNOSQL_COSMOS_CHANGE_META_SLEEPMS', '0'
+            # sleep defined number of seconds to allow time between
+            # update then delete events.  5 seconds seems to work, less
+            # isnt enough time and cosmos doesnt send update event
+            sleep_secs = int(os.environ.get(
+                'ABNOSQL_COSMOS_CHANGE_META_SLEEPSECS', '5'
             ))
-            if sleep_ms > 0:
-                time.sleep(sleep_ms / 1000)
+            # disabled if 0
+            if sleep_secs > 0:
+                time.sleep(sleep_secs)
 
         self._container(self.name).delete_item(
             **get_key_kwargs(**kwargs)

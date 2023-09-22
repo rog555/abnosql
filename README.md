@@ -185,7 +185,7 @@ item = {
 }
 ```
 
-Because no REMOVE event is sent at all without preview change feed mode above - abnosql must first update the item, and then delete it.  This is also needed for the eventSource / table name to be captured in the event, so unfortunately until Cosmos supports both attributes, update is needed before a delete
+Because no REMOVE event is sent at all without preview change feed mode above - abnosql must first update the item, and then delete it.  This is also needed for the eventSource / table name to be captured in the event, so unfortunately until Cosmos supports both attributes, update is needed before a delete.  5 second synchronous sleep is added by default between update and delete to allow CosmosDB to send the update event (0 seconds results in no update event).  This can be controlled with `ABNOSQL_COSMOS_CHANGE_META_SLEEPSECS` env var (defaults to `5` seconds), and disabled by setting to `0`
 
 This behaviour is enabled by default, however can be disabled by setting `ABNOSQL_COSMOS_CHANGE_META` env var to `FALSE` or `cosmos_change_meta=False` in table config.  `ABNOSQL_CAMELCASE` = `FALSE` env var can also be used to change attribute names used to snake_case if needed
 

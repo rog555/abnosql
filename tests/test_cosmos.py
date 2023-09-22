@@ -1,5 +1,6 @@
 from base64 import b64encode
 import os
+import time
 
 import pytest
 import responses  # type: ignore
@@ -73,7 +74,12 @@ def test_put_items():
 @responses.activate
 def test_delete_item():
     setup_cosmos()
+    start_secs = time.time()
+    os.environ['ABNOSQL_COSMOS_CHANGE_META'] = 'TRUE'
     cmn.test_delete_item()
+    os.environ.pop('ABNOSQL_COSMOS_CHANGE_META', None)
+    # validate that ABNOSQL_COSMOS_CHANGE_META_SLEEPSECS defaulted to 5
+    assert time.time() >= start_secs + 5
 
 
 @mock_cosmos

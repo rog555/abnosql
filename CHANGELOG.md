@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.12] - 2023-09-22
+- default sleep seconds to 5 between cosmos update/delete for change metadata
+
 ## [v0.0.11] - 2023-09-12
 - fix change metadata REMOVE bug
   
