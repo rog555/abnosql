@@ -82,8 +82,11 @@ def query_items(
                 _val = quote_str(_val)
             statement = statement.replace(_param, str(_val))
 
-    if table_name is None:
-        table_name = get_table_name(statement)
+    # azure cosmos can often have alias table names eg SELECT * FROM c
+    # so get table name from statement.  Don't query if no items
+    table_name = get_table_name(statement)
+    if len(items) == 0:
+        return []
 
     # sqlglot execute can't handle dict or list keys...
     # also doesnt like camelCase attribute names because expects them to be

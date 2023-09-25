@@ -1,6 +1,10 @@
 Changelog
 =========
 
+
+## [v0.0.13] - 2023-09-25
+- memory.py table minor fix to support cosmos queries with hyphen in tablenames
+  
 ## [v0.0.12] - 2023-09-22
 - default sleep seconds to 5 between cosmos update/delete for change metadata
 
