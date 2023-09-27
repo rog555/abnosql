@@ -1,6 +1,8 @@
 Changelog
 =========
 
+## [v0.0.14] - 2023-09-27
+- memory.py fix to query camelCase via sqlglot
 
 ## [v0.0.13] - 2023-09-25
 - memory.py table minor fix to support cosmos queries with hyphen in tablenames

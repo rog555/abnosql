@@ -67,3 +67,5 @@ target/
 .env
 .venv
 temp/
+
+test-output.xml
