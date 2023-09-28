@@ -138,7 +138,7 @@ def get_dynamodb_kwargs(
         kwargs['ExpressionAttributeNames'] = _names
     if len(filters):
         kwargs['FilterExpression'] = ' AND '.join([
-            f'{k} = :{k}' for k in filters.keys()
+            f'#{k} = :{k}' for k in filters.keys()
         ])
     return kwargs
 
@@ -271,7 +271,7 @@ class Table(TableBase):
         if last is not None:
             last = b64encode(json.dumps(last).encode()).decode()
         return {
-            'items': deserialize(items),
+            'items': deserialize(items, self.config.get('deserializer')),
             'next': last
         }
 
