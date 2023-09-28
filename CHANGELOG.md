@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.15] - 2023-09-28
+- fix for dynamodb query filter and deserialization
+
 ## [v0.0.14] - 2023-09-27
 - memory.py fix to query camelCase via sqlglot
 
