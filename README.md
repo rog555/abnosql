@@ -279,21 +279,21 @@ Set the following environment variables:
 - `ABNOSQL_DB` = "cosmos"
 - `ABNOSQL_COSMOS_ACCOUNT` = your database account
 - `ABNOSQL_COSMOS_ENDPOINT` = drived from `ABNOSQL_COSMOS_ACCOUNT` if not set
-- `ABNOSQL_COSMOS_CREDENTIAL` = your cosmos credential, use [Azure Key Vault References](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli) if using Azure Functions
+- `ABNOSQL_COSMOS_CREDENTIAL` = your cosmos credential, use [Azure Key Vault References](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references?tabs=azure-cli) if using Azure Functions.  Don't set to use DefaultAzureCredential / managed identity.
 - `ABNOSQL_COSMOS_DATABASE` = cosmos database
 
 **OR** - use the connection string format:
 
-- `ABNOSQL_DB` = "cosmos://account@credential:database"
+- `ABNOSQL_DB` = "cosmos://account@credential:database" or "cosmos://account@:database" to use managed identity (credential could also be "DefaultAzureCredential")
 
-Or define in config (though ideally you want to use env vars to avoid application specific code).
+Alternatively, define in config (though ideally you want to use env vars to avoid application / environment specific code).
 
 ```
 from abnosq import table
 
 tb = table(
     'mytable',
-    config={'account': 'foo', 'credential': 'someb64key', 'database': 'bar'},
+    config={'account': 'foo', 'database': 'bar'},
     database='cosmos'
 )
 ```
