@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.16] - 2023-09-29
+- support cosmos managed identity via DefaultAzureCredential if credential not supplied
+
 ## [v0.0.15] - 2023-09-28
 - fix for dynamodb query filter and deserialization
 

@@ -46,6 +46,8 @@ def test_get_item():
 @responses.activate
 def test_put_item():
     setup_cosmos()
+    # test with DefaultAzureCredential
+    os.environ.pop('ABNOSQL_COSMOS_CREDENTIAL', None)
     cmn.test_put_item()
 
 

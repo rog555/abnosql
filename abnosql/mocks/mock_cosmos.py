@@ -8,6 +8,7 @@ import responses  # type: ignore
 
 from abnosql.plugins.table.memory import get_table_count
 from abnosql import table
+import abnosql.mocks.mock_azure_auth as auth
 
 
 KEY_ATTRS: t.Dict[str, t.List[str]] = {}
@@ -157,6 +158,7 @@ def mock_cosmos(f):
 
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        auth.mock_auth()
         for method in ['GET', 'POST', 'DELETE', 'PUT', 'PATCH']:
             responses.add_callback(
                 getattr(responses, method),

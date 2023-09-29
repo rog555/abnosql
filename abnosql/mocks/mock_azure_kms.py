@@ -1,23 +1,17 @@
 import functools
 import json
-import os
 import re
 import time
 from urllib import parse as urlparse
 
 import responses  # type: ignore
 
+import abnosql.mocks.mock_azure_auth as auth
+
 # this is used because don't want to poke around in internals
 # of azure.keyvault.keys and use RsaKey to wrap/unwrap (and
 # also couldnt get it to work)
 AESGCM_KEY = 'qaIQJKZjpemmOBhKvEln6w=='  # some random made up b64 AESGCM key
-AUTH_COUNTER = 0
-
-
-def tenant_id():
-    return os.environ.get(
-        'AZURE_TENANT_ID', '9b833a13-cf81-4917-a5a7-7860358faeda'  # random
-    )
 
 
 def mock_azure_kms(f):
@@ -53,20 +47,6 @@ def mock_azure_kms(f):
 
         # /keys/bar/45e36a1024a04062bd489db0d9004d09
         if method == 'GET' and len(parts) == 3 and parts[0] == 'keys':
-            global AUTH_COUNTER
-            AUTH_COUNTER += 1
-            if AUTH_COUNTER == 1:
-                # without this, keys auth challenge strips the POST body
-                auth = 'https://login.microsoftonline.com/' + tenant_id()
-                res = 'https://vault.azure.net'
-                headers = {
-                    'WWW-Authenticate': (
-                        f'Bearer authorization="{auth}", resource="{res}"'
-                    )
-                }
-                return _response(401, {}, headers)
-            AUTH_COUNTER = 0
-            # response from https://learn.microsoft.com/en-us/rest/api/keyvault/keys/get-key/get-key  # noqa
             return _response(
                 200,
                 {
@@ -125,34 +105,13 @@ def mock_azure_kms(f):
 
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        auth.mock_auth()
         for method in ['GET', 'POST']:
             responses.add_callback(
                 getattr(responses, method),
                 re.compile(r'^https://.*.vault.azure.net.*'),
                 _callback,
                 content_type='application/json'
-            )
-            endpoint = 'https://login.microsoftonline.com/' + tenant_id()
-            # this is not what azure would return, but it works to
-            # mock the auth pipeline and allow POST body to reach
-            # the mock rather than be stripped without the auth challenge
-            # (not that mock actually uses POST body...)
-            responses.add(
-                getattr(responses, method),
-                re.compile(r'.*login.microsoftonline.com.*'),
-                json={
-                    'authorization_endpoint': endpoint,
-                    'token_endpoint': endpoint,
-                    'metadata': [],
-                    'access_token': 'foobar',
-                    'refresh_token': 'foobar',
-                    'expires_in': 100,
-                    'client_info': (
-                        # b64 {"uid": "foo", "utid": "bar"}
-                        'eyJ1aWQiOiAiZm9vIiwgInV0aWQiOiAiYmFyIn0='
-                    )
-                },
-                status=200
             )
         return f(*args, **kwargs)
     return decorated

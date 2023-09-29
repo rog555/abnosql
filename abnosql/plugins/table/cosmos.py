@@ -27,6 +27,7 @@ try:
     from azure.cosmos import CosmosClient  # type: ignore
     from azure.cosmos.exceptions import CosmosHttpResponseError  # type: ignore
     from azure.cosmos.exceptions import CosmosResourceNotFoundError  # type: ignore # noqa
+    from azure.identity import DefaultAzureCredential  # type: ignore
 except ImportError:
     MISSING_DEPS = True
 
@@ -109,9 +110,15 @@ class Table(TableBase):
             cf.update({
                 'account': pc.username,
                 'database': pc.hostname,
-                'credential': pc.password
+                'credential': (
+                    None if (
+                        pc.password == 'DefaultAzureCredential'
+                        or pc.password == ''
+                    )
+                    else pc.password
+                )
             })
-        required = ['endpoint', 'credential', 'database']
+        required = ['endpoint', 'database']
         for attr in ['account'] + required:
             val = self.config.get(
                 attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
@@ -121,6 +128,9 @@ class Table(TableBase):
                 cf[attr] = val
         if cf.get('endpoint') is None and cf['account'] is not None:
             cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
+        # use managed identity if no credential supplied
+        if cf.get('credential') is None:
+            cf['credential'] = DefaultAzureCredential()
         missing = [_ for _ in required if cf[_] is None]
         if len(missing):
             raise ex.ConfigException('missing config: ' + ', '.join(missing))
