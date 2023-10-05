@@ -24,7 +24,9 @@ __version__ = get_version()
 
 
 base_deps = [
-    'pluggy'
+    'jsonschema',
+    'pluggy',
+    'pyyaml'
 ]
 cli_deps = [
     'click',

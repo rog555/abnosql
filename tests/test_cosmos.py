@@ -2,6 +2,7 @@ from base64 import b64encode
 import os
 import time
 
+from azure.identity import EnvironmentCredential  # type: ignore
 import pytest
 import responses  # type: ignore
 
@@ -29,10 +30,20 @@ def setup_cosmos():
 @mock_cosmos
 @responses.activate
 def test_exceptions():
-    os.environ.pop('ABNOSQL_DB', None)
-    with pytest.raises(ex.ConfigException) as e:
-        cmn.test_get_item()
-    assert 'Unable to locate credentials' in str(e.value)
+    setup_cosmos()
+    os.environ.pop('ABNOSQL_COSMOS_CREDENTIAL', None)
+    vars = ['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_CLIENT_SECRET']
+    orig = {var: os.environ.pop(var, None) for var in vars}
+    with pytest.raises(ex.PluginException) as e:
+        cmn.test_get_item(config={
+            'credential': EnvironmentCredential()
+        })
+    assert 'EnvironmentCredential authentication unavailable' in str(e.value)
+
+    # restore (prob don't need to do this)
+    for var, val in orig.items():
+        if val is not None:
+            os.environ[var] = val
 
 
 @mock_cosmos
@@ -40,6 +51,20 @@ def test_exceptions():
 def test_get_item():
     setup_cosmos()
     cmn.test_get_item()
+
+
+@mock_cosmos
+@responses.activate
+def test_check_exists():
+    setup_cosmos()
+    cmn.test_check_exists()
+
+
+@mock_cosmos
+@responses.activate
+def test_validate_item():
+    setup_cosmos()
+    cmn.test_validate_item()
 
 
 @mock_cosmos

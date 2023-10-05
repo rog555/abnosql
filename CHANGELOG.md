@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.17] - 2023-10-05
+- check_exists, schema validation and cosmos DefaultAzureCredential cred fix
+  
 ## [v0.0.16] - 2023-09-29
 - support cosmos managed identity via DefaultAzureCredential if credential not supplied
 

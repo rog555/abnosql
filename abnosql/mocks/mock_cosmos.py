@@ -6,9 +6,9 @@ from urllib import parse as urlparse
 
 import responses  # type: ignore
 
+import abnosql.mocks.mock_azure_auth as auth
 from abnosql.plugins.table.memory import get_table_count
 from abnosql import table
-import abnosql.mocks.mock_azure_auth as auth
 
 
 KEY_ATTRS: t.Dict[str, t.List[str]] = {}

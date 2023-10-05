@@ -4,9 +4,9 @@ import boto3  # type: ignore
 from moto import mock_dynamodb  # type: ignore
 import pytest
 
-from abnosql import table
 import abnosql.exceptions as ex
 from abnosql.mocks import mock_dynamodbx
+from abnosql import table
 from tests import common as cmn
 
 
@@ -57,6 +57,18 @@ def test_get_item():
     # test inferring ABNOSQL_DB / database via region env var
     setup_dynamodb(set_region=True)
     cmn.test_get_item()
+
+
+@mock_dynamodb
+def test_check_exists():
+    setup_dynamodb()
+    cmn.test_check_exists()
+
+
+@mock_dynamodb
+def test_validate_item():
+    setup_dynamodb()
+    cmn.test_validate_item()
 
 
 @mock_dynamodb

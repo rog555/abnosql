@@ -12,12 +12,15 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import check_exists
+from abnosql.table import check_exists_enabled
 from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
 from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import TableBase
+from abnosql.table import validate_item
 from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
@@ -60,6 +63,7 @@ def deserialize(obj, deserializer=None):
 
 def get_key(**kwargs):
     key = dict(kwargs)
+    key.pop('abnosql_check_exists', None)
     if len(key) > 2 or len(key) == 0:
         raise ValueError('key length must be 1 or 2')
     return key
@@ -80,6 +84,8 @@ def dynamodb_ex_handler(raise_not_found: t.Optional[bool] = True):
                 raise ex.ValidationException(e) from None
             except NoCredentialsError as e:
                 raise ex.ConfigException(e) from None
+            except ex.NoSQLException:
+                raise
             except Exception as e:
                 raise ex.PluginException(e)
         return wrapper
@@ -157,6 +163,7 @@ class Table(TableBase):
             )
         )
         self.key_attrs = get_key_attrs(self.config)
+        self.check_exists = check_exists_enabled(self.config)
         self.table = self.session.resource('dynamodb').Table(name)
 
     @dynamodb_ex_handler()
@@ -169,16 +176,19 @@ class Table(TableBase):
         self.config = config
 
     @dynamodb_ex_handler()
-    def get_item(self, **kwargs) -> t.Dict:
+    def get_item(self, **kwargs) -> t.Optional[t.Dict]:
         response = deserialize(self.table.get_item(
             TableName=self.name,
             Key=get_key(**kwargs)
         ), self.config.get('deserializer'))
+        _check_exists = dict(**kwargs).pop('abnosql_check_exists', None)
         item = response.get('Item')
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
         item = kms_decrypt_item(self.config, item)
+        if _check_exists is not False:
+            check_exists(self, 'get', item)
         return item
 
     @dynamodb_ex_handler()
@@ -188,6 +198,9 @@ class Table(TableBase):
         update: t.Optional[bool] = False,
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
+        operation = 'update' if update else 'create'
+        validate_item(self.config, operation, item)
+        item = check_exists(self, operation, item)
         if audit_user:
             item = add_audit(item, update or False, audit_user)
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
@@ -238,6 +251,7 @@ class Table(TableBase):
 
     @dynamodb_ex_handler()
     def delete_item(self, **kwargs):
+        check_exists(self, 'delete', dict(kwargs))
         key = get_key(**kwargs)
         self.table.delete_item(Key=key)
         self.pm.hook.delete_item_post(table=self.name, key=key)

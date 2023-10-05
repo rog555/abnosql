@@ -11,6 +11,8 @@ import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
 from abnosql.table import add_change_meta
+from abnosql.table import check_exists
+from abnosql.table import check_exists_enabled
 from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
 from abnosql.table import kms_decrypt_item
@@ -18,6 +20,7 @@ from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import parse_connstr
 from abnosql.table import TableBase
+from abnosql.table import validate_item
 from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
@@ -51,6 +54,8 @@ def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
                 if code in [400]:
                     raise ex.ValidationException(get_message(e)) from None
                 raise ex.ConfigException(get_message(e)) from None
+            except ex.NoSQLException:
+                raise
             except Exception as e:
                 raise ex.PluginException(e)
         return wrapper
@@ -59,6 +64,7 @@ def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
 
 def get_key_kwargs(**kwargs):
     key = dict(kwargs)
+    key.pop('abnosql_check_exists', None)
     if len(key) > 2 or len(key) == 0:
         raise ValueError('key length must be 1 or 2')
     keys = list(key.keys())
@@ -83,8 +89,9 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
-        self.key_attrs = get_key_attrs(self.config)
         self.database_client = None
+        self.key_attrs = get_key_attrs(self.config)
+        self.check_exists = check_exists_enabled(self.config)
         # enabled by default
         self.change_meta = self.config.get(
             'cosmos_change_meta',
@@ -119,7 +126,7 @@ class Table(TableBase):
                 )
             })
         required = ['endpoint', 'database']
-        for attr in ['account'] + required:
+        for attr in ['account', 'credential'] + required:
             val = self.config.get(
                 attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
             )
@@ -142,13 +149,22 @@ class Table(TableBase):
     def _container(self, name):
         return self._database_client().get_container_client(name)
 
-    @cosmos_ex_handler(False)
-    def get_item(self, **kwargs) -> t.Dict:
-        item = strip_cosmos_attrs(
-            self._container(self.name).read_item(
-                **get_key_kwargs(**kwargs)
+    @cosmos_ex_handler()
+    def get_item(self, **kwargs) -> t.Optional[t.Dict]:
+        _check_exists = dict(**kwargs).pop('abnosql_check_exists', None)
+        item = None
+        try:
+            item = strip_cosmos_attrs(
+                self._container(self.name).read_item(
+                    **get_key_kwargs(**kwargs)
+                )
             )
-        )
+        except CosmosResourceNotFoundError:
+            if _check_exists is False or self.check_exists is False:
+                return None
+            else:
+                raise ex.NotFoundException('item not found')
+
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
@@ -162,6 +178,10 @@ class Table(TableBase):
         update: t.Optional[bool] = False,
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
+        operation = 'update' if update else 'create'
+        validate_item(self.config, operation, item)
+        item = check_exists(self, operation, item)
+
         if audit_user:
             item = add_audit(item, update or False, audit_user)
 
@@ -209,6 +229,7 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def delete_item(self, **kwargs):
+        check_exists(self, 'delete', dict(kwargs))
 
         # if change metadata enabled do update first then delete
         if self.change_meta is True:

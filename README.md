@@ -18,6 +18,8 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
   - [Querying](#querying)
   - [Indexes](#indexes)
   - [Updates](#updates)
+  - [Existence Checking](#existence-checking)
+  - [Schema Validation](#schema-validation)
   - [Partition Keys](#partition-keys)
   - [Pagination](#pagination)
   - [Audit](#audit)
@@ -137,6 +139,41 @@ tb = table('mytable', {'key_attrs': ['hk', 'rk']})
 If you don't need to do any updates and only need to do create/replace, then these key attribute names do not need to be supplied
 
 All items being updated must actually exist first, or else exception raised
+
+
+## Existence Checking
+
+If `check_exists` config attribute is `True`, then CRUD operations will raise exceptions as follows:
+
+- `get_item()` raises `NotFoundException` if item doesnt exist
+- `put_item()` raises `ExistsException` if item already exists
+- `put_item(update=True)` raises `NotFoundException` if item doesnt exist to update
+- `delete_item()` raises `NotFoundException` if item doesnt exist
+
+This adds some delay overhead as abnosql must check if item exists
+
+This can also be enabled by setting environment variable `ABNOSQL_CHECK_EXISTS=TRUE`
+
+If for some reason you need to override this behaviour once enabled for `put_item()` create operation,
+you can pass `abnosql_check_exists=False` into the item (this gets popped out so not persisten), which
+will allow create operation to overwrite the existing item without throwing `ExistsException`
+
+## Schema Validation
+
+`config` can define jsonschema to validate upon create or update operations (via `put_item()`)
+
+Combination of the following config attributes supported
+
+- `schema` : jsonschema dict or yaml string, applied to both create and update
+- `create_schema` : jsonschema dict/yaml only on create
+- `update_schema` : jsonschema dict/yaml only on update
+- `schema_errmsg` : override default error message on both create and update
+- `create_schema_errmsg` : override default error message on create
+- `update_schema_errmsg` : override default error message on update
+
+You can get details of validation errors through `e.to_problem()` or `e.detail`
+
+NOTE: `key_attrs` required when updating (see [Updates](#updates))
 
 ## Partition Keys
 
@@ -289,7 +326,7 @@ Set the following environment variables:
 Alternatively, define in config (though ideally you want to use env vars to avoid application / environment specific code).
 
 ```
-from abnosq import table
+from abnosql import table
 
 tb = table(
     'mytable',

@@ -3,10 +3,12 @@ from abc import abstractmethod
 from datetime import datetime
 from datetime import timezone
 import json
+import jsonschema  # type: ignore
 import os
 import re
 import typing as t
 from urllib.parse import urlparse
+from yaml import safe_load  # type: ignore
 
 import pluggy  # type: ignore
 
@@ -101,6 +103,7 @@ class TableSpecs(plugin.PluginSpec):
 
 
 class TableBase(metaclass=ABCMeta):
+
     @abstractmethod
     def __init__(
         self, pm: plugin.PM, name: str, config: t.Optional[dict] = None
@@ -116,7 +119,7 @@ class TableBase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_item(self, **kwargs) -> t.Dict:
+    def get_item(self, **kwargs) -> t.Optional[t.Dict]:
         """Get table/collection item
 
         Args:
@@ -368,6 +371,25 @@ def validate_key_attrs(key_attrs: t.Iterable[str], item: t.Dict):
         )
 
 
+def validate_item(
+    config: t.Dict, operation: str, item: t.Dict
+):
+    schema = config.get(f'{operation}_schema', config.get('schema'))
+    if schema is None:
+        return
+    title = config.get(
+        f'{operation}_schema_errmsg',
+        config.get('schema_errmsg', 'invalid item')
+    )
+    schema = safe_load(schema) if isinstance(schema, str) else schema
+    validator = jsonschema.Draft7Validator(schema)
+    errors = []
+    for err in sorted(validator.iter_errors(item), key=str):
+        errors.append(err.message)
+    if len(errors) > 0:
+        raise ex.ValidationException(title, {'errors': errors})
+
+
 def kms_encrypt_item(config: t.Dict, item: t.Dict) -> t.Dict:
     """Encrypt item values as defined in config
 
@@ -537,6 +559,37 @@ def add_change_meta(item: t.Dict, event_source: str, event_name: str) -> t.Dict:
             name_attr: event_name
         }
     })
+    return item
+
+
+def check_exists_enabled(config):
+    return config.get(
+        'check_exists',
+        os.environ.get('ABNOSQL_CHECK_EXISTS', 'FALSE') == 'TRUE'
+    ) is True
+
+
+def check_exists(obj: TableBase, operation: str, item: dict):
+    if len(obj.key_attrs) == 0 or obj.check_exists is False:  # type: ignore
+        return item
+    key = {
+        k: item.get(k) for k in obj.key_attrs  # type: ignore
+    } if item is not None else None
+    if operation == 'get' and item is None:
+        raise ex.NotFoundException('item not found')
+    elif operation == 'create' and key is not None:
+        # can be overridden if defined in item
+        if item.pop('abnosql_check_exists', None) is False:
+            return item
+        key['abnosql_check_exists'] = False
+        if obj.get_item(**key) is not None:
+            raise ex.ExistsException('item already exists')
+    elif operation == 'update' and key is not None:
+        if obj.get_item(**key) is None:
+            raise ex.NotFoundException('item not found')
+    elif operation == 'delete' and key is not None:
+        if obj.get_item(**key) is None:
+            raise ex.NotFoundException('item not found')
     return item
 
 

@@ -2,6 +2,9 @@ import os
 import typing as t
 
 import pluggy  # type: ignore
+import pytest
+
+import abnosql.exceptions as ex
 from abnosql import plugin
 from abnosql import table
 
@@ -76,6 +79,114 @@ def test_get_item(config=None, tables=None):
         expected_item = item('1')
         actual_item = validate_change_meta(actual_item, 'INSERT')
         assert actual_item == expected_item
+
+
+def test_check_exists(config=None):
+    if config is None:
+        config = {'key_attrs': ['hk', 'rk'], 'check_exists': True}
+    tb = table('hash_range', config)
+
+    with pytest.raises(ex.NotFoundException) as e:
+        tb.get_item(hk='1', rk='a')
+    assert str(e.value) == 'item not found'
+
+    with pytest.raises(ex.NotFoundException) as e:
+        tb.put_item(item('1', 'a'), update=True)
+    assert str(e.value) == 'item not found'
+
+    with pytest.raises(ex.NotFoundException) as e:
+        tb.delete_item(hk='1', rk='a')
+    assert str(e.value) == 'item not found'
+
+    tb.put_item(item('1', 'a'))
+
+    # check can override
+    tb.put_item({**item('1', 'a'), **{'abnosql_check_exists': False}})
+
+    assert tb.get_item(hk='1', rk='a') is not None
+
+    with pytest.raises(ex.ExistsException) as e:
+        tb.put_item(item('1', 'a'), update=False)
+    assert str(e.value) == 'item already exists'
+
+
+def test_validate_item():
+    schema1 = '''
+type: object
+properties:
+  hk:
+    type: string
+  rk:
+    type: string
+  obj2:
+    type: object
+required: [hk, rk, obj2]
+'''
+    schema2 = '''
+type: object
+properties:
+  hk:
+    type: string
+  rk:
+    type: string
+  str2:
+    type: string
+required: [hk, rk, str2]
+'''
+
+    config = {
+        'key_attrs': ['hk', 'rk'],
+        'create_schema': schema1,
+        'create_schema_errmsg': 'create failed',
+        'update_schema': schema2,
+        'update_schema_errmsg': 'update failed'
+    }
+    tb = table('hash_range', config)
+    with pytest.raises(ex.ValidationException) as e:
+        tb.put_item(item('1', 'a'))
+    assert e.value.title == 'create failed'
+    assert e.value.detail == {'errors': ["'obj2' is a required property"]}
+    assert e.value.status == 400
+
+    tb.put_item({**item('1', 'a'), **{'obj2': {}}})
+    with pytest.raises(ex.ValidationException) as e:
+        tb.put_item(item('1', 'a'), update=True)
+    assert e.value.title == 'update failed'
+    assert e.value.detail == {'errors': ["'str2' is a required property"]}
+
+    tb.put_item({**item('1', 'a'), **{'str2': 'foo'}}, update=True)
+
+    # single schema for both create and update, with single errmsg
+    config = {
+        'key_attrs': ['hk', 'rk'],
+        'schema': schema1,
+        'schema_errmsg': 'invalid thing'
+    }
+    tb = table('hash_range', config)
+    with pytest.raises(ex.ValidationException) as e:
+        tb.put_item(item('1', 'a'))
+    assert e.value.title == 'invalid thing'
+    tb.put_item({**item('1', 'a'), **{'obj2': {}}})
+    with pytest.raises(ex.ValidationException) as e:
+        tb.put_item(item('1', 'a'), update=True)
+    assert e.value.title == 'invalid thing'
+
+    # single schema with default errmsg (key_attrs not needed as no update)
+    config = {
+        'schema': schema1,
+    }
+    tb = table('hash_range', config)
+    with pytest.raises(ex.ValidationException) as e:
+        tb.put_item(item('1', 'a'))
+    assert e.value.title == 'invalid item'
+
+    # check problem
+    assert e.value.to_problem() == {
+        'title': 'invalid item',
+        'detail': {'errors': ["'obj2' is a required property"]},
+        'status': 400,
+        'type': None
+    }
 
 
 def test_put_item(config=None):
