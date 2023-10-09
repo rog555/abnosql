@@ -377,6 +377,12 @@ def validate_item(
     schema = config.get(f'{operation}_schema', config.get('schema'))
     if schema is None:
         return
+    camel_case = os.environ.get('ABNOSQL_CAMELCASE', 'TRUE') == 'TRUE'
+    meta_attr = 'changeMetadata' if camel_case else 'change_metadata'
+    name_attr = 'eventName' if camel_case else 'event_name'
+    existing_event = item.get(meta_attr, {}).get(name_attr)
+    if existing_event == 'REMOVE':
+        return
     title = config.get(
         f'{operation}_schema_errmsg',
         config.get('schema_errmsg', 'invalid item')

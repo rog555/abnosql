@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.19] - 2023-10-09
+- skip validation on cosmos delete
+
 ## [v0.0.18] - 2023-10-09
 - audit_user as config option
 

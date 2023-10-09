@@ -188,6 +188,9 @@ required: [hk, rk, str2]
         'type': None
     }
 
+    # check can delete with no validation (cosmos)
+    tb.delete_item(hk='1', rk='a')
+
 
 def test_put_item(config=None):
     tb = table('hash_range', config)
