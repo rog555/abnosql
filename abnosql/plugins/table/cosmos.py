@@ -237,6 +237,8 @@ class Table(TableBase):
             item = add_change_meta(
                 dict(**kwargs), self.name, 'REMOVE'
             )
+            # don't check if exists when item created
+            item['abnosql_check_exists'] = False
             # set update to False because would need key attrs defined if True
             self.put_item(item, update=False)
             # sleep defined number of seconds to allow time between

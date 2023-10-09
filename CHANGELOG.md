@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.20] - 2023-10-09
+- abnosql_check_exists=False on cosmos delete bug
+
 ## [v0.0.19] - 2023-10-09
 - skip validation on cosmos delete
 
