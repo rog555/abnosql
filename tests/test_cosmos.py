@@ -38,7 +38,13 @@ def test_exceptions():
         cmn.test_get_item(config={
             'credential': EnvironmentCredential()
         })
-    assert 'EnvironmentCredential authentication unavailable' in str(e.value)
+    assert 'plugin exception' in str(e.value)
+    assert e.value.to_problem() == {
+        'title': 'plugin exception',
+        'detail': 'EnvironmentCredential authentication unavailable. Environment variables are not fully configured.\nVisit https://aka.ms/azsdk/python/identity/environmentcredential/troubleshoot to troubleshoot this issue.',  # noqa E501
+        'status': 500,
+        'type': None
+    }
 
     # restore (prob don't need to do this)
     for var, val in orig.items():

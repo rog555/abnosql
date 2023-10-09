@@ -49,7 +49,13 @@ def test_exceptions():
     tb = table('notfound')
     with pytest.raises(ex.NotFoundException) as e:
         tb.get_item(hk='1')
-    assert 'NotFoundException' in str(e.value)
+    assert 'not found' in str(e.value)
+    assert e.value.to_problem() == {
+        'title': 'not found',
+        'detail': None,
+        'status': 404,
+        'type': None
+    }
 
 
 @mock_dynamodb

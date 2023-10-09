@@ -194,9 +194,9 @@ This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continua
 - `modifiedBy` - value of `audit_user` always added
 - `modifiedDate` - UTC ISO timestamp string, always added
 
-NOTE: created* will only be added if `update` is not True in a `put_item()` operation
+You can also specify `audit_user` as config attribute to table.  If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_CAMELCASE` = `FALSE`
 
-If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_CAMELCASE` = `FALSE`
+NOTE: created* will only be added if `update` is not True in a `put_item()` operation
 
 ## Change Feed / Stream Support
 

@@ -45,19 +45,19 @@ def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except CosmosResourceNotFoundError as e:
+            except CosmosResourceNotFoundError:
                 if raise_not_found:
-                    raise ex.NotFoundException(get_message(e)) from None
+                    raise ex.NotFoundException() from None
                 return None
             except CosmosHttpResponseError as e:
                 code = e.status_code
                 if code in [400]:
-                    raise ex.ValidationException(get_message(e)) from None
-                raise ex.ConfigException(get_message(e)) from None
+                    raise ex.ValidationException(detail=get_message(e)) from None  # noqa E501
+                raise ex.ConfigException(detail=get_message(e)) from None
             except ex.NoSQLException:
                 raise
             except Exception as e:
-                raise ex.PluginException(e)
+                raise ex.PluginException(detail=e)
         return wrapper
     return decorator
 
@@ -182,6 +182,7 @@ class Table(TableBase):
         validate_item(self.config, operation, item)
         item = check_exists(self, operation, item)
 
+        audit_user = audit_user or self.config.get('audit_user')
         if audit_user:
             item = add_audit(item, update or False, audit_user)
 

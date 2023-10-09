@@ -78,16 +78,16 @@ def dynamodb_ex_handler(raise_not_found: t.Optional[bool] = True):
             except ClientError as e:
                 code = e.response['Error']['Code']
                 if raise_not_found and code in ['ResourceNotFoundException']:
-                    raise ex.NotFoundException(e) from None
+                    raise ex.NotFoundException() from None
                 elif code == 'UnrecognizedClientException':
-                    raise ex.ConfigException(e) from None
-                raise ex.ValidationException(e) from None
+                    raise ex.ConfigException(detail=e) from None
+                raise ex.ValidationException(detail=e) from None
             except NoCredentialsError as e:
-                raise ex.ConfigException(e) from None
+                raise ex.ConfigException(detail=e) from None
             except ex.NoSQLException:
                 raise
             except Exception as e:
-                raise ex.PluginException(e)
+                raise ex.PluginException(detail=e)
         return wrapper
     return decorator
 
@@ -201,6 +201,8 @@ class Table(TableBase):
         operation = 'update' if update else 'create'
         validate_item(self.config, operation, item)
         item = check_exists(self, operation, item)
+
+        audit_user = audit_user or self.config.get('audit_user')
         if audit_user:
             item = add_audit(item, update or False, audit_user)
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)

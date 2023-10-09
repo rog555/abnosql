@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.18] - 2023-10-09
+- audit_user as config option
+
 ## [v0.0.17] - 2023-10-05
 - check_exists, schema validation and cosmos DefaultAzureCredential cred fix
   

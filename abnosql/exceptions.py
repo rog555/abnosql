@@ -1,3 +1,6 @@
+import logging
+from traceback import format_tb
+
 
 class NoSQLException(Exception):
 
@@ -8,9 +11,16 @@ class NoSQLException(Exception):
         self.status = status
 
     def to_problem(self):
+        obj = {}
+        if isinstance(self.detail, Exception):
+            obj = {
+                'exception': str(self.detail),
+                'stackTrace': format_tb(self.detail.__traceback__)
+            }
+            logging.error(self.title, obj)
         return {
             'title': self.title,
-            'detail': self.detail,
+            'detail': obj.get('exception', self.detail),
             'status': self.status,
             'type': None
         }
@@ -31,7 +41,7 @@ class NotFoundException(NoSQLException):
 
 
 class ConfigException(NoSQLException):
-    def __init__(self, title=None, detail=None, status=400):
+    def __init__(self, title=None, detail=None, status=500):
         super(ConfigException, self).__init__(
             title or 'invalid config', detail, status
         )
