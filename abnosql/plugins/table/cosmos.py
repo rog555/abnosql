@@ -35,6 +35,39 @@ except ImportError:
     MISSING_DEPS = True
 
 
+def _get_database_client():
+    cf = {}
+    pc = parse_connstr()
+    if pc is not None:
+        cf.update({
+            'account': pc.username,
+            'database': pc.hostname,
+            'credential': (
+                None if (
+                    pc.password == 'DefaultAzureCredential'
+                    or pc.password == ''
+                )
+                else pc.password
+            )
+        })
+    for attr in ['account', 'credential', 'endpoint', 'database']:
+        cf[attr] = os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
+    if cf['endpoint'] is None and cf['account'] is not None:
+        cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
+    if cf['credential'] is None:
+        cf['credential'] = DefaultAzureCredential()
+    if cf['endpoint'] is None or cf['database'] is None:
+        return None
+    return CosmosClient(
+        url=cf['endpoint'], credential=cf['credential']
+    ).get_database_client(cf['database'])
+
+
+# Azure recommends using a singleton client for the lifetime of your app
+# https://learn.microsoft.com/en-us/azure/azure-functions/manage-connections?tabs=csharp
+DATABASE_CLIENT = _get_database_client()
+
+
 def cosmos_ex_handler(raise_not_found: t.Optional[bool] = True):
 
     def get_message(e):
@@ -89,7 +122,9 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
-        self.database_client = None
+        self.database_client = DATABASE_CLIENT
+        if os.environ.get('ABNOSQL_DISABLE_GLOBAL_CACHE', 'FALSE') == 'TRUE':
+            self.database_client = None
         self.key_attrs = get_key_attrs(self.config)
         self.check_exists = check_exists_enabled(self.config)
         # enabled by default
@@ -111,35 +146,44 @@ class Table(TableBase):
         _client = self.config.get('database_client', self.database_client)
         if _client is not None:
             return _client
-        pc = parse_connstr()
         cf = {}
-        if pc is not None:
-            cf.update({
-                'account': pc.username,
-                'database': pc.hostname,
-                'credential': (
-                    None if (
-                        pc.password == 'DefaultAzureCredential'
-                        or pc.password == ''
-                    )
-                    else pc.password
-                )
-            })
         required = ['endpoint', 'database']
-        for attr in ['account', 'credential'] + required:
-            val = self.config.get(
-                attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
-            )
-            # override
-            if val is not None:
-                cf[attr] = val
-        if cf.get('endpoint') is None and cf['account'] is not None:
+        additional = ['account', 'credential']
+        local = [
+            _ for _ in required + additional if self.config.get(_) is not None
+        ]
+        disable_cache = os.environ.get('ABNOSQL_DISABLE_GLOBAL_CACHE', 'FALSE')
+        if len(local) or disable_cache == 'TRUE':
+            # prefer local config over env var
+            pc = parse_connstr()
+            if pc is not None:
+                cf.update({
+                    'account': pc.username,
+                    'database': pc.hostname,
+                    'credential': (
+                        None if (
+                            pc.password == 'DefaultAzureCredential'
+                            or pc.password == ''
+                        )
+                        else pc.password
+                    )
+                })
+            for attr in required + additional:
+                val = self.config.get(
+                    attr, os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
+                )
+                # override
+                if val is not None:
+                    cf[attr] = val
+        if cf.get('endpoint') is None and cf.get('account') is not None:
             cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
         # use managed identity if no credential supplied
         if cf.get('credential') is None:
             cf['credential'] = DefaultAzureCredential()
-        missing = [_ for _ in required if cf[_] is None]
+        missing = [_ for _ in required if cf.get(_) is None]
         if len(missing):
+            if self.database_client is not None:
+                return self.database_client
             raise ex.ConfigException('missing config: ' + ', '.join(missing))
         self.database_client = CosmosClient(
             url=cf['endpoint'], credential=cf['credential']

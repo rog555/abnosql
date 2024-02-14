@@ -25,6 +25,7 @@ def setup_cosmos():
         'mycredential'.encode('utf-8')
     ).decode()
     os.environ['ABNOSQL_COSMOS_DATABASE'] = 'bar'
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'TRUE'
 
 
 @mock_cosmos
