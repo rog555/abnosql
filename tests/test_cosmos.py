@@ -9,6 +9,7 @@ import responses  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.mocks import mock_cosmos
 from abnosql.mocks.mock_cosmos import set_keyattrs
+from abnosql.plugins.table import cosmos
 from abnosql.plugins.table.memory import clear_tables
 from tests import common as cmn
 
@@ -25,6 +26,28 @@ def setup_cosmos():
         'mycredential'.encode('utf-8')
     ).decode()
     os.environ['ABNOSQL_COSMOS_DATABASE'] = 'bar'
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'TRUE'
+
+
+@mock_cosmos
+@responses.activate
+def test_config_exception():
+    setup_cosmos()
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'FALSE'
+    with pytest.raises(ex.ConfigException) as e:
+        cmn.test_get_item()
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'TRUE'
+    assert str(e.value) == 'missing config: endpoint, database'
+
+
+@mock_cosmos
+@responses.activate
+def test_config_exception1():
+    setup_cosmos()
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'FALSE'
+    from importlib import reload
+    reload(cosmos)
+    cmn.test_get_item()
     os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'TRUE'
 
 

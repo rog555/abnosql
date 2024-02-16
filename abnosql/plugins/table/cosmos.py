@@ -51,20 +51,23 @@ def _get_database_client():
             )
         })
     for attr in ['account', 'credential', 'endpoint', 'database']:
-        cf[attr] = os.environ.get('ABNOSQL_COSMOS_' + attr.upper())
+        cf[attr] = os.environ.get(
+            'ABNOSQL_COSMOS_' + attr.upper(),
+            cf.get(attr)
+        )
     if cf['endpoint'] is None and cf['account'] is not None:
         cf['endpoint'] = 'https://%s.documents.azure.com' % cf['account']
-    if cf['credential'] is None:
-        cf['credential'] = DefaultAzureCredential()
     if cf['endpoint'] is None or cf['database'] is None:
         return None
+    if cf['credential'] is None:
+        cf['credential'] = DefaultAzureCredential()
     return CosmosClient(
         url=cf['endpoint'], credential=cf['credential']
     ).get_database_client(cf['database'])
 
 
 # Azure recommends using a singleton client for the lifetime of your app
-# https://learn.microsoft.com/en-us/azure/azure-functions/manage-connections?tabs=csharp
+# https://learn.microsoft.com/en-us/azure/azure-functions/manage-connections
 DATABASE_CLIENT = _get_database_client()
 
 
