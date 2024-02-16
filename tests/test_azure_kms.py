@@ -31,6 +31,7 @@ def setup_cosmos():
     os.environ['AZURE_TENANT_ID'] = 'ddb6e3bf-68ca-4216-a84f-d3a4b05c8314'
     os.environ['AZURE_CLIENT_SECRET'] = 'foobar12345'
     os.environ['ABNOSQL_KMS_KEYS'] = KEY_ID
+    os.environ['ABNOSQL_DISABLE_GLOBAL_CACHE'] = 'TRUE'
     return {
         'kms': {
             'key_attrs': ['hk', 'rk'],

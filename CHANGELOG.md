@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.21] - 2024-02-14
+- use a singleton Azure Cosmos DB client for the lifetime of the application
+
 ## [v0.0.20] - 2023-10-09
 - abnosql_check_exists=False on cosmos delete bug
 
