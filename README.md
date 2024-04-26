@@ -113,7 +113,7 @@ tb.delete_item({'hk': '1', 'rk': 'a'})
 
 ## API Docs
 
-See [API Docs](https://rog555.github.io/abnosql/abnosql/table.html)
+See [API Docs](https://rog555.github.io/abnosql/docs/abnosql/table.html)
 
 ## Querying
 
