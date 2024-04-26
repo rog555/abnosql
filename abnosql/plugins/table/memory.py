@@ -159,11 +159,13 @@ def memory_ex_handler(raise_not_found: t.Optional[bool] = True):
 
 class Table(TableBase):
 
+    @memory_ex_handler()
     def __init__(
         self, pm: PM, name: str, config: t.Optional[dict] = None
     ) -> None:
         self.pm = pm
         self.name = name
+        self.database = 'memory'
         self.set_config(config)
         self.key_attrs = get_key_attrs(self.config)
         self.items = self.config.get('items', {})

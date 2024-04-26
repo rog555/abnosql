@@ -119,6 +119,7 @@ def strip_cosmos_attrs(item):
 
 class Table(TableBase):
 
+    @cosmos_ex_handler()
     def __init__(
         self, pm: PM, name: str, config: t.Optional[dict] = None
     ) -> None:

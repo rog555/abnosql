@@ -151,6 +151,7 @@ def get_dynamodb_kwargs(
 
 class Table(TableBase):
 
+    @dynamodb_ex_handler()
     def __init__(
         self, pm: PM, name: str, config: t.Optional[dict] = None
     ) -> None:

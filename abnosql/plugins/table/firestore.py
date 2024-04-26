@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from os.path import expanduser
+import sys
 
 import typing as t
 
@@ -32,7 +33,8 @@ from sqlglot import exp
 hookimpl = pluggy.HookimplMarker('abnosql.table')
 
 try:
-    from google.api_core import exceptions as gex  # type: ignore
+    from google.api_core.exceptions import ClientError  # type: ignore
+    from google.auth.exceptions import GoogleAuthError  # type: ignore
     from google.cloud import firestore  # type: ignore
 except ImportError:
     MISSING_DEPS = True
@@ -53,20 +55,23 @@ def firestore_ex_handler(raise_not_found: t.Optional[bool] = True):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except gex.ClientError as e:
+            except ClientError as e:
                 if raise_not_found and e.code in [404]:
                     raise ex.NotFoundException() from None
                 raise ex.ValidationException(detail=e) from None
+            except GoogleAuthError as e:
+                raise ex.ConfigException(detail=e) from None
             except ex.NoSQLException:
                 raise
             except Exception as e:
-                raise ex.PluginException(detail=e)
+                raise ex.PluginException(detail=e) from None
         return wrapper
     return decorator
 
 
 class Table(TableBase):
 
+    @firestore_ex_handler()
     def __init__(
         self, pm: PM, name: str, config: t.Optional[dict] = None
     ) -> None:
@@ -97,14 +102,19 @@ class Table(TableBase):
                 if val is not None:
                     kwargs[attr] = val
                 break
-        cred_file = os.path.join(
-            expanduser('~'),
-            '.config',
-            'gcloud',
-            'application_default_credentials.json'
-        )
-        if os.path.isfile(cred_file):
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cred_file
+        cred_file = os.path.join(*(
+            (
+                tuple(os.environ.get('APPDATA', ''))
+                if sys.platform == 'win32'
+                else (expanduser('~'), '.config')
+            ) + (
+                'gcloud',
+                'application_default_credentials.json'
+            )
+        ))
+        gac = 'GOOGLE_APPLICATION_CREDENTIALS'
+        if gac not in os.environ and os.path.isfile(cred_file):
+            os.environ[gac] = cred_file
         return firestore.Client(**kwargs)
 
     def _docid(self, **kwargs):

@@ -1,11 +1,21 @@
 import os
 
 from mockfirestore import MockFirestore  # type: ignore
+import pytest
 from tests import common as cmn
+
+from abnosql import exceptions as ex
+from abnosql import table
+
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(ROOT_DIR, 'tests', 'data')
 
 
 def config(table='hash_range', extra={}):
     os.environ.update({
+        'GOOGLE_APPLICATION_CREDENTIALS': os.path.join(
+            DATA_DIR, 'google_mocked_creds.json'
+        ),
         'ABNOSQL_DB': 'firestore',
         'GOOGLE_CLOUD_PROJECT': 'foo',  # this is to just stop warnings on CLI
         'ABNOSQL_FIRESTORE_DATABASE': 'bar'
@@ -17,6 +27,20 @@ def config(table='hash_range', extra={}):
     }
     config.update(extra)
     return config
+
+
+def test_exceptions():
+    _config = config()
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'foobar'
+    with pytest.raises(ex.ConfigException) as e:
+        table('foobar', _config)
+    assert 'invalid config' in str(e.value)
+    assert e.value.to_problem() == {
+        'title': 'invalid config',
+        'detail': 'File foobar was not found.',
+        'status': 500,
+        'type': None
+    }
 
 
 def test_get_item():

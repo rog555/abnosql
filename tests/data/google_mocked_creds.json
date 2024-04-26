@@ -1,0 +1,9 @@
+{
+    "account": "",
+    "client_id": "foobar.apps.googleusercontent.com",
+    "client_secret": "foobar",
+    "refresh_token": "foobar",
+    "type": "authorized_user",
+    "universe_domain": "googleapis.com"
+}
+  
