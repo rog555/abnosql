@@ -156,6 +156,7 @@ class Table(TableBase):
     ) -> None:
         self.pm = pm
         self.name = name
+        self.database = 'dynamodb'
         self.set_config(config)
         self.session = self.config.get(
             'session', boto3.session.Session(

@@ -48,6 +48,10 @@ azure_kms_deps = [
     'azure-keyvault-keys',
     'cryptography'  # already used by azure-identity
 ]
+google_firestore_deps = [
+    'google-cloud-firestore',
+    'sqlglot'
+]
 all_deps = (
     base_deps
     + cli_deps
@@ -55,11 +59,13 @@ all_deps = (
     + aws_kms_deps
     + azure_cosmos_deps
     + azure_kms_deps
+    + google_firestore_deps
 )
 test_deps = all_deps + [
     'coverage',
     'moto[dynamodb]==4.2.13',
     'moto[kms]==4.2.13',
+    'mock-firestore==0.11.0'
     'mypy',
     'pytest',
     'pytest-cov',

@@ -4,6 +4,7 @@ Basic CRUD and query support for NoSQL databases, allowing for portable cloud na
 
 - AWS DynamoDB <img height="15" width="15" src="https://unpkg.com/simple-icons@v9/icons/amazondynamodb.svg" />
 - Azure Cosmos NoSQL <img height="15" width="15" src="https://unpkg.com/simple-icons@v9/icons/microsoftazure.svg" />
+- Google Firestore <img height="15" width="15" src="https://unpkg.com/simple-icons@v9/icons/firebase.svg" />
 
 This library is not intended to create databases/tables, use Terraform/ARM/CloudFormation etc for that
 
@@ -28,10 +29,12 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
 - [Configuration](#configuration)
   - [AWS DynamoDB](#aws-dynamodb)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql)
+  - [Google Firestore](#google-firestore)
 - [Plugins and Hooks](#plugins-and-hooks)
 - [Testing](#testing)
   - [AWS DynamoDB](#aws-dynamodb-1)
   - [Azure Cosmos NoSQL](#azure-cosmos-nosql-1)
+  - [Google Firestore](#google-firestore-1)
 - [CLI](#cli)
 - [Future Enhancements / Ideas](#future-enhancements--ideas)
 
@@ -41,6 +44,7 @@ Why not just use the name 'nosql' or 'pynosql'? because they already exist on py
 ```
 pip install 'abnosql[dynamodb]'
 pip install 'abnosql[cosmos]'
+pip install 'abnosql[firestore]'
 ```
 
 For optional [client side](#client-side-encryption) field level envelope encryption
@@ -121,6 +125,8 @@ During mocked tests, [SQLGlot](https://sqlglot.com/) is used to [execute](https:
 
 Care should be taken with `query_sql()` to not to use SQL features that are specific to any specific provider (breaking the abstraction capability of using abnosql in the first place)
 
+The Firestore plugin uses sqlglot to parse simple SQL statements (eg AND only supported)
+
 ## Indexes
 
 Beyond partition and range keys defined on the table, indexes currently have limited support within abnosql
@@ -139,6 +145,8 @@ tb = table('mytable', {'key_attrs': ['hk', 'rk']})
 If you don't need to do any updates and only need to do create/replace, then these key attribute names do not need to be supplied
 
 All items being updated must actually exist first, or else exception raised
+
+Firestore does not return updated item, so if this is required use `put_get` = `True` config variable
 
 
 ## Existence Checking
@@ -183,7 +191,7 @@ A few methods such as `get_item()`, `delete_item()` and `query()` need to know p
 
 `query` and `query_sql` accept `limit` and `next` optional kwargs and return `next` in response. Use these to paginate.
 
-This works for AWS DyanmoDB, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
+This works for AWS DyanmoDB & Firestore, however Azure Cosmos has a limitation with continuation token for cross partitions queries (see [Python SDK documentation](https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/cosmos/azure-cosmos)).  For Cosmos, abnosql appends OFFSET and LIMIT in the SQL statement if not already present, and returns `next`.  `limit` is defaulted to 100.  See the tests for examples
 
 ## Audit
 
@@ -227,6 +235,8 @@ Because no REMOVE event is sent at all without preview change feed mode above - 
 This behaviour is enabled by default, however can be disabled by setting `ABNOSQL_COSMOS_CHANGE_META` env var to `FALSE` or `cosmos_change_meta=False` in table config.  `ABNOSQL_CAMELCASE` = `FALSE` env var can also be used to change attribute names used to snake_case if needed
 
 To write an Azure Function / AWS Lambda that is able to process both DynamoDB and Cosmos events, look for `changeMetadata` first and if present use that otherwise look for `eventName` and `eventSourceARN` in the event payload assuming its DynamoDB
+
+**Google Firestore** should support [triggering functions](https://firebase.google.com/docs/functions/firestore-events?gen=2nd#python-preview) similar to DynamoDB Streams, so changeMetadata is not required
 
 ## Client Side Encryption
 
@@ -288,6 +298,7 @@ if `ABNOSQL_DB` env var is not set, abnosql will attempt to apply defaults based
 
 - `AWS_DEFAULT_REGION` - sets database to `dynamodb` (see [aws docs](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html))
 - `FUNCTIONS_WORKER_RUNTIME` - sets database to `cosmos` (see [azure docs](https://learn.microsoft.com/en-us/azure/azure-functions/functions-app-settings#functions_worker_runtime))
+- `K_SERVICE` - sets database to `firestore` (though this could also get confused if running on knative)
 
 
 ## AWS DynamoDB
@@ -334,6 +345,36 @@ tb = table(
     database='cosmos'
 )
 ```
+
+
+## Google Firestore
+
+Set the following environment variables:
+
+- `ABNOSQL_DB` = "firestore"
+- `ABNOSQL_FIRESTORE_PROJECT` or `GOOGLE_CLOUD_PROJECT` = google cloud project
+- `ABNOSQL_FIRESTORE_DATABASE` = Firestore database
+- `ABNOSQL_FIRESTORE_CREDENTIALS` = oauth, optional - if using google CLI, its also picked up from `~/.config/gcloud/application_default_credentials.json` if found
+
+**OR** - use the connection string format:
+
+- `ABNOSQL_DB` = "firestore://project@credential:database"
+
+Alternatively, define in config (though ideally you want to use env vars to avoid application / environment specific code).
+
+```
+from abnosql import table
+
+tb = table(
+    'mytable',
+    config={'project': 'foo', 'database': 'bar'},
+    database='firestore'
+)
+```
+
+See also https://cloud.google.com/firestore/docs/authentication
+
+
 
 # Plugins and Hooks
 
@@ -390,6 +431,23 @@ def test_something():
 
 More examples in [tests/test_cosmos.py](./tests/test_cosmos.py)
 
+
+## Google Firestore
+
+Use [python-mock-firestore](https://github.com/mdowds/python-mock-firestore) and pass `MockFirestore()` to table config as `client` attribute
+
+Example:
+
+```
+from mockfirestore import MockFirestore
+
+
+def test_something():
+    tb = table('mytable', {'client': MockFirestore()})
+    item = tb.get_item(foo='bar')
+
+```
+
 # CLI
 
 Small abnosql CLI installed with few of the commands above
@@ -430,7 +488,7 @@ p2           p2.2      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]
 
 - [x] client side encryption
 - [x] test pagination & exception handling
-- [ ] [Google Firestore](https://cloud.google.com/python/docs/reference/firestore/latest) support, ideally in the core library (though could be added outside via use of the plugin system).  Would need something like [FireSQL](https://firebaseopensource.com/projects/jsayol/firesql/) implemented for oython, maybe via sqlglot
+- [x] [Google Firestore](https://cloud.google.com/python/docs/reference/firestore/latest) support, ideally in the core library (though could be added outside via use of the plugin system).  Would need something like [FireSQL](https://firebaseopensource.com/projects/jsayol/firesql/) implemented for python, maybe via sqlglot
 - [ ] [Google Vault](https://cloud.google.com/python/docs/reference/cloudkms/latest/) KMS support
 - [ ] [Hashicorp Vault](https://github.com/hashicorp/vault-examples/blob/main/examples/_quick-start/python/example.py) KMS support
 - [ ] Simple caching (maybe) using globals (used for AWS Lambda / Azure Functions)

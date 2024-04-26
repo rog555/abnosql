@@ -82,8 +82,8 @@ def test_get_item(config=None, tables=None):
 
 
 def test_check_exists(config=None):
-    if config is None:
-        config = {'key_attrs': ['hk', 'rk'], 'check_exists': True}
+    config = config or {}
+    config.update({'key_attrs': ['hk', 'rk'], 'check_exists': True})
     tb = table('hash_range', config)
 
     with pytest.raises(ex.NotFoundException) as e:
@@ -110,7 +110,8 @@ def test_check_exists(config=None):
     assert str(e.value) == 'item already exists'
 
 
-def test_validate_item():
+def test_validate_item(_config=None):
+    _config = _config or {}
     schema1 = '''
 type: object
 properties:
@@ -133,14 +134,14 @@ properties:
     type: string
 required: [hk, rk, str2]
 '''
-
-    config = {
+    config = _config.copy()
+    config.update({
         'key_attrs': ['hk', 'rk'],
         'create_schema': schema1,
         'create_schema_errmsg': 'create failed',
         'update_schema': schema2,
         'update_schema_errmsg': 'update failed'
-    }
+    })
     tb = table('hash_range', config)
     with pytest.raises(ex.ValidationException) as e:
         tb.put_item(item('1', 'a'))
@@ -157,11 +158,12 @@ required: [hk, rk, str2]
     tb.put_item({**item('1', 'a'), **{'str2': 'foo'}}, update=True)
 
     # single schema for both create and update, with single errmsg
-    config = {
+    config = _config.copy()
+    config.update({
         'key_attrs': ['hk', 'rk'],
         'schema': schema1,
         'schema_errmsg': 'invalid thing'
-    }
+    })
     tb = table('hash_range', config)
     with pytest.raises(ex.ValidationException) as e:
         tb.put_item(item('1', 'a'))
@@ -172,9 +174,10 @@ required: [hk, rk, str2]
     assert e.value.title == 'invalid thing'
 
     # single schema with default errmsg (key_attrs not needed as no update)
-    config = {
+    config = _config.copy()
+    config.update({
         'schema': schema1,
-    }
+    })
     tb = table('hash_range', config)
     with pytest.raises(ex.ValidationException) as e:
         tb.put_item(item('1', 'a'))
@@ -213,11 +216,12 @@ def test_put_item_audit(config=None):
     assert item1['modifiedDate'] == item1['createdDate']
     validate_change_meta(item1, 'INSERT')
 
-    item2 = tb.put_item(
+    tb.put_item(
         {'hk': '1', 'rk': 'a', 'str': 'STR'},
         update=True,
         audit_user='bar'
     )
+    item2 = tb.get_item(hk='1', rk='a')
     assert item2['createdBy'] == 'foo'
     assert item2['modifiedBy'] == 'bar'
     assert item2['createdDate'] == item1['createdDate']
@@ -230,7 +234,10 @@ def test_put_item_audit(config=None):
 
 def test_update_item(config=None):
     config = config or {}
-    config.update({'key_attrs': ['hk', 'rk']})
+    config.update({
+        'key_attrs': ['hk', 'rk'],
+        'put_get': True  # firestore set/update don't return item
+    })
     tb = table('hash_range', config)
     item1 = item('1', 'a')
     assert tb.get_item(hk='1', rk='a') is None
@@ -272,6 +279,7 @@ def test_delete_item(config=None):
 
 
 def test_hooks(config=None):
+    config = config or {}
     hookimpl = pluggy.HookimplMarker('abnosql.table')
 
     class TableHooks:
@@ -284,7 +292,8 @@ def test_hooks(config=None):
         def set_config(self, table: str) -> t.Dict:
             self.called['set_config'] = True
             assert self.table == table
-            return {'a': 'b', 'key_attrs': ['hk', 'rk']}
+            config.update({'a': 'b', 'key_attrs': ['hk', 'rk']})
+            return config
 
         @hookimpl
         def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # noqa E501
@@ -317,10 +326,11 @@ def test_hooks(config=None):
     pm = plugin.get_pm('table')
     pm.register(hooks)
 
-    tb = table('hash_range')
+    tb = table('hash_range', config)
 
     assert 'set_config' in hooks.called
-    assert tb.config == {'a': 'b', 'key_attrs': ['hk', 'rk']}
+    assert tb.config['a'] == 'b'
+    assert tb.config['key_attrs'] == ['hk', 'rk']
 
     tb.put_item(item('1', 'a'))
     assert 'put_item_pre' in hooks.called
@@ -380,9 +390,10 @@ def test_query_scan(config=None):
 
 
 def test_query_pagination(config=None):
-    tb = table('hash_range')
+    tb = table('hash_range', config)
     _items = items(['1', '2'], ['a', 'b'])
     tb.put_items(_items)
+
     response = tb.query(limit=1)
     assert response['items'] == [_items[0]]
     next = response['next']
@@ -390,5 +401,6 @@ def test_query_pagination(config=None):
     response = tb.query(limit=1, next=next)
     assert response['items'] == [_items[1]]
     response = tb.query(limit=2, next=response['next'])
+
     assert response['items'] == _items[2:4]
     assert response['next'] is None

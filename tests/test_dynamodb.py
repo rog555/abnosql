@@ -1,7 +1,7 @@
 import os
 
 import boto3  # type: ignore
-from moto import mock_dynamodb  # type: ignore
+from moto import mock_aws  # type: ignore
 import pytest
 
 import abnosql.exceptions as ex
@@ -43,9 +43,9 @@ def setup_dynamodb(set_region=False):
     create_table('hash_only', False)
 
 
-@mock_dynamodb
+@mock_aws
 def test_exceptions():
-    os.environ.pop('ABNOSQL_DB', None)
+    setup_dynamodb(set_region=True)
     tb = table('notfound')
     with pytest.raises(ex.NotFoundException) as e:
         tb.get_item(hk='1')
@@ -58,83 +58,83 @@ def test_exceptions():
     }
 
 
-@mock_dynamodb
+@mock_aws
 def test_get_item():
     # test inferring ABNOSQL_DB / database via region env var
     setup_dynamodb(set_region=True)
     cmn.test_get_item()
 
 
-@mock_dynamodb
+@mock_aws
 def test_check_exists():
     setup_dynamodb()
     cmn.test_check_exists()
 
 
-@mock_dynamodb
+@mock_aws
 def test_validate_item():
     setup_dynamodb()
     cmn.test_validate_item()
 
 
-@mock_dynamodb
+@mock_aws
 def test_put_item():
     setup_dynamodb()
     cmn.test_put_item()
 
 
-@mock_dynamodb
+@mock_aws
 def test_put_item_audit():
     setup_dynamodb()
     cmn.test_put_item_audit()
 
 
-@mock_dynamodb
+@mock_aws
 def test_update_item():
     setup_dynamodb()
     cmn.test_update_item()
 
 
-@mock_dynamodb
+@mock_aws
 def test_put_items():
     setup_dynamodb()
     cmn.test_put_items()
 
 
-@mock_dynamodb
+@mock_aws
 def test_delete_item():
     setup_dynamodb()
     cmn.test_delete_item()
 
 
-@mock_dynamodb
+@mock_aws
 def test_hooks():
     setup_dynamodb()
     cmn.test_hooks()
 
 
-@mock_dynamodb
+@mock_aws
 def test_query():
     setup_dynamodb()
     cmn.test_query()
 
 
 @mock_dynamodbx
-@mock_dynamodb
+@mock_aws
 def test_query_sql():
     setup_dynamodb()
     cmn.test_query_sql()
 
 
 @mock_dynamodbx
-@mock_dynamodb
+@mock_aws
 def test_query_scan():
     setup_dynamodb()
     cmn.test_query_scan()
 
 
 @mock_dynamodbx
-@mock_dynamodb
+@mock_aws
 def test_query_pagination():
     setup_dynamodb()
     cmn.test_query_pagination()

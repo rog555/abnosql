@@ -125,6 +125,7 @@ class Table(TableBase):
         self.pm = pm
         self.name = name
         self.set_config(config)
+        self.database = 'cosmos'
         self.database_client = DATABASE_CLIENT
         if os.environ.get('ABNOSQL_DISABLE_GLOBAL_CACHE', 'FALSE') == 'TRUE':
             self.database_client = None
@@ -316,15 +317,11 @@ class Table(TableBase):
         key = key or {}
         validate_query_attrs(key, filters)
         parameters = {
-            f'@{k}': v
-            for k, v in filters.items()
+            f'@{k}': v for k, v in
+            (filters | key).items()
         }
         # cosmos doesnt like hyphens in table names
         table_alias = 'c' if '-' in self.name else self.name
-        parameters.update({
-            f'@{k}': v
-            for k, v in key.items()
-        })
         statement = f'SELECT * FROM {table_alias}'
         op = 'WHERE'
         for param in parameters.keys():
@@ -337,7 +334,6 @@ class Table(TableBase):
             limit=limit,
             next=next
         )
-        resp['items'] = kms_process_query_items(self.config, resp['items'])
         return resp
 
     @cosmos_ex_handler()

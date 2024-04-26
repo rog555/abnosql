@@ -633,7 +633,8 @@ def table(
     if database is None:
         defaults = {
             'AWS_DEFAULT_REGION': 'dynamodb',
-            'FUNCTIONS_WORKER_RUNTIME': 'cosmos'
+            'FUNCTIONS_WORKER_RUNTIME': 'cosmos',
+            'K_SERVICE': 'firestore'
         }
         for envvar, _database in defaults.items():
             if os.environ.get(envvar) is not None:
@@ -661,6 +662,7 @@ def table(
         defaults = {
             'dynamodb': 'aws',
             'cosmos': 'azure'
+            # 'firestore': 'google'
         }
         provider = kcfg.get('provider')
         if database is not None and provider is None:

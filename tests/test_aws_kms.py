@@ -3,8 +3,7 @@ import os
 
 import boto3  # type: ignore
 from boto3.dynamodb.types import Decimal  # type: ignore
-from moto import mock_dynamodb  # type: ignore
-from moto import mock_kms  # type: ignore
+from moto import mock_aws  # type: ignore
 
 from abnosql.mocks import mock_dynamodbx
 from tests import common as cmn
@@ -39,6 +38,7 @@ def get_table(name):
 
 def setup_dynamodb():
     os.environ['ABNOSQL_DB'] = 'dynamodb'
+    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
     create_table('hash_range', True)
     kms = boto3.client('kms')
     resp = kms.create_key(
@@ -53,8 +53,7 @@ def setup_dynamodb():
     }
 
 
-@mock_dynamodb
-@mock_kms
+@mock_aws
 def test_get_put_item():
     config = setup_dynamodb()
     cmn.test_get_item(config, 'hash_range')
@@ -67,8 +66,7 @@ def test_get_put_item():
     assert item['num'] == Decimal('5')
 
 
-@mock_dynamodb
-@mock_kms
+@mock_aws
 def test_query():
     config = setup_dynamodb()
     resp = cmn.test_query(config, return_response=True)
@@ -78,8 +76,7 @@ def test_query():
 
 
 @mock_dynamodbx
-@mock_dynamodb
-@mock_kms
+@mock_aws
 def test_query_sql():
     config = setup_dynamodb()
     resp = cmn.test_query_sql(config, return_response=True)

@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.22] - 2024-04-26
+- Google Firestore support
+
 ## [v0.0.21] - 2024-02-14
 - use a singleton Azure Cosmos DB client for the lifetime of the application
 
