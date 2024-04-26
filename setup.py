@@ -63,8 +63,7 @@ all_deps = (
 )
 test_deps = all_deps + [
     'coverage',
-    'moto[dynamodb]==4.2.13',
-    'moto[kms]==4.2.13',
+    'moto==5.0.5',
     'mock-firestore==0.11.0',
     'mypy',
     'pytest',
