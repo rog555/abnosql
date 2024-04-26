@@ -164,11 +164,17 @@ class Table(TableBase):
         docid = self._docid(**item)
         ref = self.table.document(docid)
         if update is True:
-            self.batch.update(ref, item) if self.batch else ref.update(item)
+            if self.batch:
+                self.batch.update(ref, item)
+            else:
+                ref.update(item)
 
         # do create/replace
         else:
-            self.batch.set(ref, item) if self.batch else ref.set(item)
+            if self.batch:
+                self.batch.set(ref, item)
+            else:
+                ref.set(item)
 
         self.pm.hook.put_item_post(table=self.name, item=item)
 
@@ -192,7 +198,8 @@ class Table(TableBase):
             self.put_item(item, update=update, audit_user=audit_user)
         self.pm.hook.put_items_post(table=self.name, items=items)
         if self.config.get('batchmode') is not False:
-            self.batch.commit()
+            if self.batch is not None:
+                self.batch.commit()
             self.batch = None
 
     @firestore_ex_handler()
@@ -258,7 +265,7 @@ class Table(TableBase):
                     continue
                 column = cond.this.name
                 expr = cond.expression
-                operator = OPERATORS.get(type(cond))
+                operator = OPERATORS.get(type(cond))  # type: ignore
                 val = expr.this.name
                 pval = parameters.get(f'@{val}')
                 if isinstance(expr, exp.Column):
