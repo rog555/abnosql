@@ -23,7 +23,7 @@ jobs:
       - name: Extract the version number
         id: get_version
         run: |
-          echo ::set-output name=V::$(python abnosql/version.py)
+          echo "V=$(python abnosql/version.py)" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         run: |
