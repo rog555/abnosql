@@ -1,6 +1,6 @@
 import os
 
-from mockfirestore import MockFirestore
+from mockfirestore import MockFirestore  # type: ignore
 from tests import common as cmn
 
 
