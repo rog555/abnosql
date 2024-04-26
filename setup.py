@@ -103,8 +103,10 @@ setup(
         'cli': cli_deps,
         'aws': aws_dynamodb_deps + aws_kms_deps,
         'azure': azure_cosmos_deps + azure_kms_deps,
+        'google': google_firestore_deps,
         'dynamodb': aws_dynamodb_deps,
         'cosmos': azure_cosmos_deps,
+        'firestore': google_firestore_deps,
         'aws-kms': aws_kms_deps,
         'azure-kms': azure_kms_deps
     },
