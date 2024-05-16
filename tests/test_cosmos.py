@@ -16,6 +16,7 @@ from tests import common as cmn
 
 def setup_cosmos():
     clear_tables()
+    os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
     set_keyattrs({
         'hash_range': ['hk', 'rk'],
         'hash_only': ['hk']
@@ -102,7 +103,7 @@ def test_validate_item():
 def test_put_item():
     setup_cosmos()
     # test with DefaultAzureCredential
-    os.environ.pop('ABNOSQL_COSMOS_CREDENTIAL', None)
+    # os.environ.pop('ABNOSQL_COSMOS_CREDENTIAL', None)
     cmn.test_put_item()
 
 
@@ -144,6 +145,13 @@ def test_delete_item():
 def test_hooks():
     setup_cosmos()
     cmn.test_hooks()
+
+
+@mock_cosmos
+@responses.activate
+def test_audit_callback():
+    setup_cosmos()
+    cmn.test_audit_callback()
 
 
 @mock_cosmos

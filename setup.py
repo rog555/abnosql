@@ -48,9 +48,12 @@ azure_kms_deps = [
     'azure-keyvault-keys',
     'cryptography'  # already used by azure-identity
 ]
-google_firestore_deps = [
+gcp_firestore_deps = [
     'google-cloud-firestore',
     'sqlglot'
+]
+gcp_kms_deps = [
+    'tink[gcpkms]'
 ]
 all_deps = (
     base_deps
@@ -59,7 +62,8 @@ all_deps = (
     + aws_kms_deps
     + azure_cosmos_deps
     + azure_kms_deps
-    + google_firestore_deps
+    + gcp_firestore_deps
+    + gcp_kms_deps
 )
 test_deps = all_deps + [
     'coverage',
@@ -102,12 +106,14 @@ setup(
         'cli': cli_deps,
         'aws': aws_dynamodb_deps + aws_kms_deps,
         'azure': azure_cosmos_deps + azure_kms_deps,
-        'google': google_firestore_deps,
+        'google': gcp_firestore_deps + gcp_kms_deps,
+        'gcp': gcp_firestore_deps + gcp_kms_deps,
         'dynamodb': aws_dynamodb_deps,
         'cosmos': azure_cosmos_deps,
-        'firestore': google_firestore_deps,
+        'firestore': gcp_firestore_deps,
         'aws-kms': aws_kms_deps,
-        'azure-kms': azure_kms_deps
+        'azure-kms': azure_kms_deps,
+        'gcp-kms': gcp_kms_deps,
     },
     python_requires='>=3.9,<4.0',
     test_suite='tests',

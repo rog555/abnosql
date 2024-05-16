@@ -1,10 +1,12 @@
 import os
+from unittest.mock import patch
 
 from mockfirestore import MockFirestore  # type: ignore
 import pytest
 from tests import common as cmn
 
 from abnosql import exceptions as ex
+from abnosql.plugins.table.firestore import Table as FirestoreTable
 from abnosql import table
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -14,7 +16,7 @@ DATA_DIR = os.path.join(ROOT_DIR, 'tests', 'data')
 def config(table='hash_range', extra={}):
     os.environ.update({
         'GOOGLE_APPLICATION_CREDENTIALS': os.path.join(
-            DATA_DIR, 'google_mocked_creds.json'
+            DATA_DIR, 'google', 'mocked_credentials.json'
         ),
         'ABNOSQL_DB': 'firestore',
         'GOOGLE_CLOUD_PROJECT': 'foo',  # this is to just stop warnings on CLI
@@ -48,8 +50,14 @@ def test_get_item():
     cmn.test_get_item(config('hash_only'), 'hash_only')
 
 
+# example of patching get_client with MockFirestore
+# from mockfirestore import MockFirestore
+# from abnosql.plugins.table.firestore import Table as FirestoreTable
+@patch.object(FirestoreTable, 'get_client', MockFirestore)
 def test_check_exists():
-    cmn.test_check_exists(config())
+    _config = config()
+    _config.pop('client', None)
+    cmn.test_check_exists(_config)
 
 
 def test_validate_item():
@@ -78,6 +86,10 @@ def test_delete_item():
 
 def test_hooks():
     cmn.test_hooks(config())
+
+
+def test_audit_callback():
+    cmn.test_audit_callback(config())
 
 
 def test_query_base():

@@ -12,6 +12,7 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import audit_callback
 from abnosql.table import check_exists
 from abnosql.table import check_exists_enabled
 from abnosql.table import get_key_attrs
@@ -179,6 +180,8 @@ class Table(TableBase):
 
     @dynamodb_ex_handler()
     def get_item(self, **kwargs) -> t.Optional[t.Dict]:
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
+        self.pm.hook.get_item_pre(table=self.name, key=key)
         response = deserialize(self.table.get_item(
             TableName=self.name,
             Key=get_key(**kwargs)
@@ -191,6 +194,8 @@ class Table(TableBase):
         item = kms_decrypt_item(self.config, item)
         if _check_exists is not False:
             check_exists(self, 'get', item)
+        if item is not None:
+            audit_callback(self, 'get', key)
         return item
 
     @dynamodb_ex_handler()
@@ -201,6 +206,7 @@ class Table(TableBase):
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
         operation = 'update' if update else 'create'
+        key = validate_key_attrs(self.key_attrs, item)
         validate_item(self.config, operation, item)
         item = check_exists(self, operation, item)
 
@@ -214,7 +220,6 @@ class Table(TableBase):
 
         # do update
         if update is True:
-            validate_key_attrs(self.key_attrs, item)
             kwargs = {
                 'Key': {k: item.pop(k) for k in self.key_attrs},
                 'ReturnValues': 'ALL_NEW'
@@ -239,6 +244,9 @@ class Table(TableBase):
             self.table.put_item(Item=item)
 
         self.pm.hook.put_item_post(table=self.name, item=item)
+        audit_callback(
+            self, 'update' if update else 'create', key, audit_user
+        )
         return item
 
     @dynamodb_ex_handler()
@@ -255,10 +263,12 @@ class Table(TableBase):
 
     @dynamodb_ex_handler()
     def delete_item(self, **kwargs):
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
         check_exists(self, 'delete', dict(kwargs))
-        key = get_key(**kwargs)
-        self.table.delete_item(Key=key)
+        _key = get_key(**kwargs)
+        self.table.delete_item(Key=_key)
         self.pm.hook.delete_item_post(table=self.name, key=key)
+        audit_callback(self, 'delete', key)
 
     @dynamodb_ex_handler()
     def query(

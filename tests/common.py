@@ -62,7 +62,9 @@ def validate_change_meta_response(response, event_name):
 
 def test_get_item(config=None, tables=None):
     actual_item = None
+    tb = None
     if tables is None or 'hash_range' in tables:
+        os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
         tb = table('hash_range', config)
         assert tb.get_item(hk='1', rk='a') is None
         tb.put_item(item('1', 'a'))
@@ -72,6 +74,7 @@ def test_get_item(config=None, tables=None):
         assert actual_item == expected_item
 
     if tables is None or 'hash_only' in tables:
+        os.environ['ABNOSQL_KEY_ATTRS'] = 'hk'
         tb = table('hash_only', config)
         assert tb.get_item(hk='1') is None
         tb.put_item(item('1'))
@@ -79,6 +82,8 @@ def test_get_item(config=None, tables=None):
         expected_item = item('1')
         actual_item = validate_change_meta(actual_item, 'INSERT')
         assert actual_item == expected_item
+
+    return tb
 
 
 def test_check_exists(config=None):
@@ -232,6 +237,44 @@ def test_put_item_audit(config=None):
     os.environ.pop('ABNOSQL_KEY_ATTRS')
 
 
+def test_audit_callback(config=None):
+
+    events = []
+
+    def _callback(table_name, dt_iso, operation, key, audit_user):
+        assert dt_iso.startswith('20') and dt_iso.endswith('Z')
+        events.append(','.join([
+            table_name, '<date>', operation, str(key), audit_user
+        ]))
+
+    config = config or {}
+    os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
+    config.update({
+        'audit_user': 'someuser',
+        'audit_callback': _callback
+    })
+    tb = table('hash_range', config)
+    assert tb.get_item(hk='1', rk='a') is None
+
+    tb.put_item(item('1', 'a'))
+
+    tb.get_item(hk='1', rk='a')
+
+    tb.put_item({'hk': '1', 'rk': 'a', 'foo': 'bar'}, update=True)
+
+    tb.delete_item(hk='1', rk='a')
+
+    actual = '\n'.join(events)
+    print(actual)
+
+    expected = '''hash_range,<date>,create,hk=1;rk=a,someuser
+hash_range,<date>,get,hk=1;rk=a,someuser
+hash_range,<date>,update,hk=1;rk=a,someuser
+hash_range,<date>,delete,hk=1;rk=a,someuser'''
+
+    assert actual == expected
+
+
 def test_update_item(config=None):
     config = config or {}
     config.update({
@@ -296,6 +339,11 @@ def test_hooks(config=None):
             return config
 
         @hookimpl
+        def get_item_pre(self, table: str, key: t.Dict):  # noqa E501
+            self.called['get_item_pre'] = True
+            assert self.table == table
+
+        @hookimpl
         def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # noqa E501
             self.called['get_item_post'] = True
             assert self.table == table
@@ -337,6 +385,7 @@ def test_hooks(config=None):
     assert 'put_item_post' in hooks.called
 
     assert tb.get_item(hk='1', rk='a') == {'foo': 'bar'}
+    assert 'get_item_pre' in hooks.called
     assert 'get_item_post' in hooks.called
 
     tb.put_items(items(['1', '2'], ['a', 'b']))

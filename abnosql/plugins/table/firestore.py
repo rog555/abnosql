@@ -14,12 +14,12 @@ import pluggy  # type: ignore
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
+from abnosql.table import audit_callback
 from abnosql.table import check_exists
 from abnosql.table import check_exists_enabled
 from abnosql.table import get_key_attrs
-# from abnosql.table import get_sql_params
-# from abnosql.table import kms_decrypt_item
-# from abnosql.table import kms_encrypt_item
+from abnosql.table import kms_decrypt_item
+from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import parse_connstr
 from abnosql.table import TableBase
@@ -79,14 +79,14 @@ class Table(TableBase):
         self.name = name
         self.database = 'firestore'
         self.set_config(config)
-        self.client = self.config.get('client', self._get_client())
+        self.client = self.config.get('client', self.get_client())
         self.key_attrs = get_key_attrs(self.config)
         self.check_exists = check_exists_enabled(self.config)
         self.table = self.client.collection(name)
         self.docid_delim = self.config.get('docid_delim', ':')
         self.batch = None
 
-    def _get_client(self):
+    def get_client(self):
         kwargs = {}
         pc = parse_connstr()
         if kwargs is not None:
@@ -139,15 +139,19 @@ class Table(TableBase):
 
     @firestore_ex_handler()
     def get_item(self, **kwargs) -> t.Optional[t.Dict]:
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
+        self.pm.hook.get_item_pre(table=self.name, key=key)
         _check_exists = dict(**kwargs).pop('abnosql_check_exists', None)
         doc = self.table.document(self._docid(**kwargs)).get()
         item = doc.to_dict() if doc.exists else None
         _item = self.pm.hook.get_item_post(table=self.name, item=item)
         if _item:
             item = _item
-        # item = kms_decrypt_item(self.config, item)
+        item = kms_decrypt_item(self.config, item)
         if _check_exists is not False:
             check_exists(self, 'get', item)
+        if item is not None:
+            audit_callback(self, 'get', key)
         return item
 
     @firestore_ex_handler()
@@ -158,7 +162,7 @@ class Table(TableBase):
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
         operation = 'update' if update else 'create'
-        validate_key_attrs(self.key_attrs, item)
+        key = validate_key_attrs(self.key_attrs, item)
         validate_item(self.config, operation, item)
         item = check_exists(self, operation, item)
 
@@ -168,7 +172,7 @@ class Table(TableBase):
         _item = self.pm.hook.put_item_pre(table=self.name, item=item)
         if _item:
             item = _item[0]
-        # item = kms_encrypt_item(self.config, item)
+        item = kms_encrypt_item(self.config, item)
 
         # do update
         docid = self._docid(**item)
@@ -193,6 +197,9 @@ class Table(TableBase):
         if self.config.get('put_get') is True:
             item = self.table.document(docid).get().to_dict()
 
+        audit_callback(
+            self, 'update' if update else 'create', key, audit_user
+        )
         return item
 
     @firestore_ex_handler()
@@ -214,10 +221,12 @@ class Table(TableBase):
 
     @firestore_ex_handler()
     def delete_item(self, **kwargs):
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
         check_exists(self, 'delete', dict(kwargs))
         docid = self._docid(**kwargs)
         self.table.document(docid).delete()
         self.pm.hook.delete_item_post(table=self.name, key=dict(kwargs))
+        audit_callback(self, 'delete', key)
 
     @firestore_ex_handler()
     def query(

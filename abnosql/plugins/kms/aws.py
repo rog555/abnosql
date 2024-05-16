@@ -32,14 +32,14 @@ def kms_ex_handler(raise_not_found: t.Optional[bool] = True):
             except ClientError as e:
                 code = e.response['Error']['Code']
                 if raise_not_found and code in ['ResourceNotFoundException']:
-                    raise ex.NotFoundException(e) from None
+                    raise ex.NotFoundException(detail=e) from None
                 elif code == 'UnrecognizedClientException':
-                    raise ex.ConfigException(e) from None
-                raise ex.ValidationException(e) from None
+                    raise ex.ConfigException(detail=e) from None
+                raise ex.ValidationException(detail=e) from None
             except NoCredentialsError as e:
-                raise ex.ConfigException(e) from None
+                raise ex.ConfigException(detail=e) from None
             except Exception as e:
-                raise ex.PluginException(e)
+                raise ex.PluginException(detail=e)
         return wrapper
     return decorator
 
@@ -51,6 +51,7 @@ class Kms(KmsBase):
     ) -> None:
         self.pm = pm
         self.config = config or {}
+        self.provider = 'aws'
         self.session = self.config.get(
             'session', Session()
         )

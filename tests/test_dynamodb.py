@@ -34,6 +34,7 @@ def create_table(name, rk=True):
 
 
 def setup_dynamodb(set_region=False):
+    os.environ['ABNOSQL_KEY_ATTRS'] = 'hk,rk'
     if set_region is True:
         os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
         os.environ.pop('ABNOSQL_DB', None)
@@ -46,7 +47,7 @@ def setup_dynamodb(set_region=False):
 @mock_aws
 def test_exceptions():
     setup_dynamodb(set_region=True)
-    tb = table('notfound')
+    tb = table('notfound', {'key_attrs': ['hk']})
     with pytest.raises(ex.NotFoundException) as e:
         tb.get_item(hk='1')
     assert 'not found' in str(e.value)
@@ -111,6 +112,12 @@ def test_delete_item():
 def test_hooks():
     setup_dynamodb()
     cmn.test_hooks()
+
+
+@mock_aws
+def test_audit_callback():
+    setup_dynamodb()
+    cmn.test_audit_callback()
 
 
 @mock_aws

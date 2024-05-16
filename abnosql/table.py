@@ -38,6 +38,18 @@ class TableSpecs(plugin.PluginSpec):
         pass
 
     @hookspec(firstresult=True)
+    def get_item_pre(self, table: str, key: t.Dict):  # type: ignore[empty-body] # noqa E501
+        """Hook invoked before get_item()
+
+        Args:
+
+            table: table name
+            key: dictionary of key passed to get_item()
+
+        """
+        pass
+
+    @hookspec(firstresult=True)
     def get_item_post(self, table: str, item: t.Dict) -> t.Dict:  # type: ignore[empty-body] # noqa E501
         """Hook invoked after get_item()
 
@@ -137,8 +149,7 @@ class TableBase(metaclass=ABCMeta):
     def put_item(
         self,
         item: t.Dict,
-        update: t.Optional[bool] = False,
-        audit_user: t.Optional[str] = None
+        update: t.Optional[bool] = False
     ) -> t.Dict:
         """Puts table/collection item
 
@@ -344,10 +355,16 @@ def get_key_attrs(config: t.Optional[t.Dict] = None) -> list:
         key_attrs = _key_attrs
     if len(key_attrs) > 2:
         raise ValueError('must not be more than 2 key_attrs defined')
+    if len(key_attrs) == 0:
+        raise ValueError('key_attrs not defined')
     return key_attrs
 
 
-def validate_key_attrs(key_attrs: t.Iterable[str], item: t.Dict):
+def validate_key_attrs(
+    key_attrs: t.Iterable[str],
+    item: t.Dict,
+    is_put: t.Optional[bool] = True
+) -> t.Dict:
     """Validate key attributes in either ABNOSQL_KEY_ATTRS env var or config
 
     Args:
@@ -365,10 +382,12 @@ def validate_key_attrs(key_attrs: t.Iterable[str], item: t.Dict):
         raise ex.ValidationException(
             f'key_attrs missing from item: {missing}'
         )
-    if len(item) - len(key_attrs) <= 0:
+    if is_put and len(item) - len(key_attrs) <= 0:
         raise ex.ValidationException(
             'item contains no additional keys beyond key_attrs'
         )
+    key = {k: item[k] for k in key_attrs}
+    return key
 
 
 def validate_item(
@@ -568,6 +587,16 @@ def add_change_meta(item: t.Dict, event_source: str, event_name: str) -> t.Dict:
     return item
 
 
+def audit_callback(tb, operation, key, audit_user=None):
+    _callback = tb.config.get('audit_callback')
+    audit_user = audit_user or tb.config.get('audit_user')
+    if not callable(_callback) or not isinstance(audit_user, str):
+        return
+    dt_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    key_str = ';'.join([f'{k}={v}' for k, v in sorted(key.items())])
+    _callback(tb.name, dt_iso, operation, key_str, audit_user)
+
+
 def check_exists_enabled(config):
     return config.get(
         'check_exists',
@@ -661,8 +690,8 @@ def table(
     if isinstance(kcfg, dict):
         defaults = {
             'dynamodb': 'aws',
-            'cosmos': 'azure'
-            # 'firestore': 'google'
+            'cosmos': 'azure',
+            'firestore': 'gcp'
         }
         provider = kcfg.get('provider')
         if database is not None and provider is None:

@@ -52,6 +52,7 @@ For optional [client side](#client-side-encryption) field level envelope encrypt
 ```
 pip install 'abnosql[aws-kms]'
 pip install 'abnosql[azure-kms]'
+pip install 'abnosql[gcp-kms]'
 ```
 
 By default, abnosql does not include database dependencies.  This is to facilitate packaging
@@ -195,16 +196,26 @@ This works for AWS DyanmoDB & Firestore, however Azure Cosmos has a limitation w
 
 ## Audit
 
-`put_item()` and `put_items()` take an optional `audit_user` kwarg.  If supplied, absnosql will add the following to the item:
+Table config attribute `audit_user` will add the following to the item being written to database:
 
 - `createdBy` - value of `audit_user`, added if does not exist in item supplied to put_item()
 - `createdDate` - UTC ISO timestamp string, added if does not exist
 - `modifiedBy` - value of `audit_user` always added
 - `modifiedDate` - UTC ISO timestamp string, always added
 
-You can also specify `audit_user` as config attribute to table.  If you prefer snake_case over CamelCase, you can set env var `ABNOSQL_CAMELCASE` = `FALSE`
+If snake_case over CamelCase is preferred, set env var `ABNOSQL_CAMELCASE` = `FALSE`
 
 NOTE: created* will only be added if `update` is not True in a `put_item()` operation
+
+Table config attribute `audit_callback` with value as a function callback can be used to hook into additional audit stores.
+
+Callback function must accept the following positional args:
+
+- `table_name` - table name
+- `dt_iso` - ISO date timestamp
+- `operation` - `create`, `update`, `get` or `delete`
+- `key` - key of item serialised in <key>=<value>; format
+- `audit_user` - user performing the operation
 
 ## Change Feed / Stream Support
 
@@ -240,14 +251,15 @@ To write an Azure Function / AWS Lambda that is able to process both DynamoDB an
 
 ## Client Side Encryption
 
-If configured in table config with `kms` attribute, abnosql will perform client side encryption using AWS KMS or Azure KeyVault
+If configured in table config with `kms` attribute, abnosql will perform client side encryption using AWS KMS, Azure KeyVault or Google KMS
 
 Each attribute value defined in the config is encrypted with a 256-bit AES-GCM data key generated for each attribute value:
 
 - `aws` uses [AWS Encryption SDK for Python](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/python.html)
-- `azure` uses [python cryptography](https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM.generate_key) to generate AES-GCM data key, encrypt the attribute value and then uses an RSA CMK in Azure Keyvault to wrap/unwrap (envelope encryption) the AES-GCM data key.  The module uses the [azure-keyvaults-keys](https://learn.microsoft.com/en-us/python/api/overview/azure/keyvault-keys-readme?view=azure-python) python SDK for wrap/unrap functionality of the generated data key (Azure doesnt support generate data key as AWS does)
+- `azure` uses [python cryptography](https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM.generate_key) to generate AES-GCM data key, encrypt the attribute value and then uses an RSA CMK in Azure Keyvault to wrap/unwrap (envelope encryption) the AES-GCM data key.  The plugin uses the [azure-keyvault-keys](https://learn.microsoft.com/en-us/python/api/overview/azure/keyvault-keys-readme?view=azure-python) python SDK for wrap/unrap functionality of the generated data key (Azure doesnt support generate data key as AWS does - see also [tink issue](https://github.com/tink-crypto/tink/issues/158#issuecomment-1382589658))
+- `gcp` uses [Google Tink](https://developers.google.com/tink/client-side-encryption)
 
-Both providers use a [256-bit AES-GCM](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/supported-algorithms.html) generated data key with AAD/encryption context (Azure provider uses a 96-nonce).  AES-GCM is an Authenticated symmetric encryption scheme used by both AWS and Azure (and [Hashicorp Vault](https://developer.hashicorp.com/vault/docs/secrets/transit#aes256-gcm96))
+All providers use a [256-bit AES-GCM](https://docs.aws.amazon.com/encryption-sdk/latest/developer-guide/supported-algorithms.html) generated data key with AAD/encryption context (Azure provider uses a 96-nonce).  AES-GCM is an Authenticated symmetric encryption scheme used by AWS, Azure & Google (and [Hashicorp Vault](https://developer.hashicorp.com/vault/docs/secrets/transit#aes256-gcm96))
 
 See also [AWS Encryption Best Practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/encryption-best-practices/welcome.html)
 
@@ -256,7 +268,15 @@ Example config:
 ```
 {
     'kms': {
+        # Azure example
         'key_ids': ['https://foo.vault.azure.net/keys/bar/45e36a1024a04062bd489db0d9004d09'],
+
+        # AWS example
+        # 'key_ids': ['arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab'],
+
+        # Google Example
+        # 'key_ids': ['gcp-kms://projects/p1/locations/global/keyRings/kr1/cryptoKeys/ck1'],
+
         'key_attrs': ['hk', 'rk'],
         'attrs': ['obj', 'str']
     }
@@ -264,7 +284,7 @@ Example config:
 ```
 
 Where:
-- `key_ids`: list of AWS KMS Key ARNs or Azure KeyVault identifier (URL to RSA CMK).  This is picked up via `ABNOSQL_KMS_KEYS` env var as a comma separated list (*NOTE: env var recommended to avoid provider specific code*)
+- `key_ids`: list of AWS KMS Key ARNs, Azure KeyVault identifier (URL to RSA CMK) or Google KMS URI.  This is picked up via `ABNOSQL_KMS_KEYS` env var as a comma separated list (*NOTE: env var recommended to avoid provider specific code*)
 - `key_attrs`: list of key attributes in the item from which the AAD/encryption context is set.  Taken from `ABNOSQL_KEY_ATTRS` env var or table `key_attrs` if defined there
 - `attrs`: list of attributes keys to encrypt
 - `key_bytes`: optional for azure, use your own AESGCM key if specified, otherwise generate one
@@ -383,6 +403,7 @@ abnosql uses pluggy and registers in the `abnosql.table` namespace
 The following hooks are available
 
 - `set_config` - set config
+- `get_item_pre`
 - `get_item_post` - called after `get_item()`, can return modified data
 - `put_item_pre`
 - `put_item_post`
@@ -434,19 +455,24 @@ More examples in [tests/test_cosmos.py](./tests/test_cosmos.py)
 
 ## Google Firestore
 
-Use [python-mock-firestore](https://github.com/mdowds/python-mock-firestore) and pass `MockFirestore()` to table config as `client` attribute
+Use [python-mock-firestore](https://github.com/mdowds/python-mock-firestore) and pass `MockFirestore()` to table config as `client` attribute, or patch get_client()
 
 Example:
 
 ```
+from unittest.mock import patch
 from mockfirestore import MockFirestore
+from abnosql.plugins.table.firestore import Table as FirestoreTable
 
 
+@patch.object(FirestoreTable, 'get_client', MockFirestore)
 def test_something():
-    tb = table('mytable', {'client': MockFirestore()})
+    tb = table('mytable', {})
     item = tb.get_item(foo='bar')
 
 ```
+
+More examples in [tests/test_firestore.py](./tests/test_firestore.py)
 
 # CLI
 
@@ -489,7 +515,7 @@ p2           p2.2      5  {'foo': 'bar', 'num': 5, 'list': [1, 2, 3]}  [1, 2, 3]
 - [x] client side encryption
 - [x] test pagination & exception handling
 - [x] [Google Firestore](https://cloud.google.com/python/docs/reference/firestore/latest) support, ideally in the core library (though could be added outside via use of the plugin system).  Would need something like [FireSQL](https://firebaseopensource.com/projects/jsayol/firesql/) implemented for python, maybe via sqlglot
-- [ ] [Google Vault](https://cloud.google.com/python/docs/reference/cloudkms/latest/) KMS support
+- [x] [Google Vault](https://cloud.google.com/python/docs/reference/cloudkms/latest/) KMS support
 - [ ] [Hashicorp Vault](https://github.com/hashicorp/vault-examples/blob/main/examples/_quick-start/python/example.py) KMS support
 - [ ] Simple caching (maybe) using globals (used for AWS Lambda / Azure Functions)
 - [ ] PostgresSQL support using JSONB column (see [here](https://medium.com/geekculture/json-and-postgresql-using-json-to-mimic-nosqls-storage-benefits-1564c69f61fc) for example).  Would be nice to avoid an ORM and having to define a model for each table...

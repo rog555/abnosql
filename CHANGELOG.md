@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.24] - 2024-05-15
+- Google KMS support and audit_callback
+
 ## [v0.0.23] - 2024-04-26
 - Google Firestore support
 

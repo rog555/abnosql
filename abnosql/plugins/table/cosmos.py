@@ -11,6 +11,7 @@ import abnosql.exceptions as ex
 from abnosql.plugin import PM
 from abnosql.table import add_audit
 from abnosql.table import add_change_meta
+from abnosql.table import audit_callback
 from abnosql.table import check_exists
 from abnosql.table import check_exists_enabled
 from abnosql.table import get_key_attrs
@@ -200,6 +201,8 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def get_item(self, **kwargs) -> t.Optional[t.Dict]:
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
+        self.pm.hook.get_item_pre(table=self.name, key=key)
         _check_exists = dict(**kwargs).pop('abnosql_check_exists', None)
         item = None
         try:
@@ -218,6 +221,7 @@ class Table(TableBase):
         if _item:
             item = _item
         item = kms_decrypt_item(self.config, item)
+        audit_callback(self, 'get', key)
         return item
 
     @cosmos_ex_handler()
@@ -228,6 +232,9 @@ class Table(TableBase):
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
         operation = 'update' if update else 'create'
+        key = validate_key_attrs(self.key_attrs, item)
+        # cosmos has to do create/update on delete but don't audit this
+        abnosql_audit_callback = item.pop('abnosql_audit_callback', None)
         validate_item(self.config, operation, item)
         item = check_exists(self, operation, item)
 
@@ -247,8 +254,6 @@ class Table(TableBase):
         item = kms_encrypt_item(self.config, item)
         # do update
         if update is True:
-            validate_key_attrs(self.key_attrs, item)
-            key = {k: item.pop(k) for k in self.key_attrs}
             kwargs = {
                 'item': key[self.key_attrs[-1]],
                 'partition_key': key[self.key_attrs[0]],
@@ -263,6 +268,10 @@ class Table(TableBase):
             item = self._container(self.name).upsert_item(item)
         item = strip_cosmos_attrs(item)
         self.pm.hook.put_item_post(table=self.name, item=item)
+        if abnosql_audit_callback is not False:
+            audit_callback(
+                self, 'update' if update else 'create', key, audit_user
+            )
         return item
 
     @cosmos_ex_handler()
@@ -280,6 +289,7 @@ class Table(TableBase):
     @cosmos_ex_handler()
     def delete_item(self, **kwargs):
         check_exists(self, 'delete', dict(kwargs))
+        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
 
         # if change metadata enabled do update first then delete
         if self.change_meta is True:
@@ -288,6 +298,8 @@ class Table(TableBase):
             )
             # don't check if exists when item created
             item['abnosql_check_exists'] = False
+            # cosmos has to do create/update on delete but don't audit this
+            item['abnosql_audit_callback'] = False
             # set update to False because would need key attrs defined if True
             self.put_item(item, update=False)
             # sleep defined number of seconds to allow time between
@@ -304,6 +316,8 @@ class Table(TableBase):
             **get_key_kwargs(**kwargs)
         )
         self.pm.hook.delete_item_post(table=self.name, key=dict(kwargs))
+        if item is not None:
+            audit_callback(self, 'delete', key)
 
     @cosmos_ex_handler()
     def query(
