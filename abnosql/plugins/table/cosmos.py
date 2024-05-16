@@ -9,20 +9,19 @@ import pluggy  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
-from abnosql.table import add_audit
 from abnosql.table import add_change_meta
-from abnosql.table import audit_callback
-from abnosql.table import check_exists
 from abnosql.table import check_exists_enabled
+from abnosql.table import delete_item_post
+from abnosql.table import delete_item_pre
+from abnosql.table import get_item_post
+from abnosql.table import get_item_pre
 from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
-from abnosql.table import kms_decrypt_item
-from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
 from abnosql.table import parse_connstr
+from abnosql.table import put_item_post
+from abnosql.table import put_item_pre
 from abnosql.table import TableBase
-from abnosql.table import validate_item
-from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
@@ -201,9 +200,8 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def get_item(self, **kwargs) -> t.Optional[t.Dict]:
-        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
-        self.pm.hook.get_item_pre(table=self.name, key=key)
-        _check_exists = dict(**kwargs).pop('abnosql_check_exists', None)
+        audit_key, _check_exists = get_item_pre(self, dict(**kwargs))
+
         item = None
         try:
             item = strip_cosmos_attrs(
@@ -217,12 +215,7 @@ class Table(TableBase):
             else:
                 raise ex.NotFoundException('item not found')
 
-        _item = self.pm.hook.get_item_post(table=self.name, item=item)
-        if _item:
-            item = _item
-        item = kms_decrypt_item(self.config, item)
-        audit_callback(self, 'get', key)
-        return item
+        return get_item_post(self, dict(**kwargs), item, audit_key)
 
     @cosmos_ex_handler()
     def put_item(
@@ -231,27 +224,11 @@ class Table(TableBase):
         update: t.Optional[bool] = False,
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
-        operation = 'update' if update else 'create'
-        key = validate_key_attrs(self.key_attrs, item)
+
         # cosmos has to do create/update on delete but don't audit this
         abnosql_audit_callback = item.pop('abnosql_audit_callback', None)
-        validate_item(self.config, operation, item)
-        item = check_exists(self, operation, item)
+        item, key = put_item_pre(self, item, update, audit_user)
 
-        audit_user = audit_user or self.config.get('audit_user')
-        if audit_user:
-            item = add_audit(item, update or False, audit_user)
-
-        # add change metadata if enabled
-        if self.change_meta is True:
-            item = add_change_meta(
-                item, self.name, 'MODIFY' if update is True else 'INSERT'
-            )
-
-        _item = self.pm.hook.put_item_pre(table=self.name, item=item)
-        if _item:
-            item = _item[0]
-        item = kms_encrypt_item(self.config, item)
         # do update
         if update is True:
             kwargs = {
@@ -267,12 +244,10 @@ class Table(TableBase):
         else:
             item = self._container(self.name).upsert_item(item)
         item = strip_cosmos_attrs(item)
-        self.pm.hook.put_item_post(table=self.name, item=item)
-        if abnosql_audit_callback is not False:
-            audit_callback(
-                self, 'update' if update else 'create', key, audit_user
-            )
-        return item
+
+        return put_item_post(
+            self, item, update, audit_user, abnosql_audit_callback
+        )
 
     @cosmos_ex_handler()
     def put_items(
@@ -288,8 +263,7 @@ class Table(TableBase):
 
     @cosmos_ex_handler()
     def delete_item(self, **kwargs):
-        check_exists(self, 'delete', dict(kwargs))
-        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
+        key = delete_item_pre(self, dict(kwargs))
 
         # if change metadata enabled do update first then delete
         if self.change_meta is True:
@@ -315,9 +289,8 @@ class Table(TableBase):
         self._container(self.name).delete_item(
             **get_key_kwargs(**kwargs)
         )
-        self.pm.hook.delete_item_post(table=self.name, key=dict(kwargs))
-        if item is not None:
-            audit_callback(self, 'delete', key)
+
+        delete_item_post(self, key)
 
     @cosmos_ex_handler()
     def query(

@@ -10,16 +10,18 @@ from sqlglot import parse_one  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
-from abnosql.table import add_audit
-from abnosql.table import audit_callback
+from abnosql.table import check_exists_enabled
+from abnosql.table import delete_item_post
+from abnosql.table import delete_item_pre
+from abnosql.table import get_item_post
+from abnosql.table import get_item_pre
 from abnosql.table import get_key_attrs
 from abnosql.table import get_sql_params
-from abnosql.table import kms_decrypt_item
-from abnosql.table import kms_encrypt_item
 from abnosql.table import kms_process_query_items
+from abnosql.table import put_item_post
+from abnosql.table import put_item_pre
 from abnosql.table import quote_str
 from abnosql.table import TableBase
-from abnosql.table import validate_key_attrs
 from abnosql.table import validate_query_attrs
 
 
@@ -170,6 +172,7 @@ class Table(TableBase):
         self.database = 'memory'
         self.set_config(config)
         self.key_attrs = get_key_attrs(self.config)
+        self.check_exists = check_exists_enabled(self.config)
         self.items = self.config.get('items', {})
 
     @memory_ex_handler()
@@ -183,8 +186,8 @@ class Table(TableBase):
 
     @memory_ex_handler()
     def get_item(self, **kwargs) -> t.Dict:
-        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
-        self.pm.hook.get_item_pre(table=self.name, key=key)
+        audit_key, _ = get_item_pre(self, dict(**kwargs))
+
         key = get_key(**kwargs)
         item = None
         if self.items:
@@ -192,13 +195,8 @@ class Table(TableBase):
         else:
             global TABLES
             item = TABLES.get(self.name, {}).get(key)
-        _item = self.pm.hook.get_item_post(table=self.name, item=item)
-        if _item:
-            item = _item
-        item = kms_decrypt_item(self.config, item)
-        if item is not None:
-            audit_callback(self, 'get', key)
-        return item
+
+        return get_item_post(self, dict(**kwargs), item, audit_key)
 
     @memory_ex_handler()
     def put_item(
@@ -207,11 +205,9 @@ class Table(TableBase):
         update: t.Optional[bool] = False,
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
-        key = validate_key_attrs(self.key_attrs, item)
-        if audit_user:
-            item = add_audit(item, update or False, audit_user)
+        item, _ = put_item_pre(self, item, update, audit_user)
+
         _key = ':'.join([item[_] for _ in self.key_attrs])
-        item = kms_encrypt_item(self.config, item)
         if self.items:
             if update is True:
                 self.items[_key].update(item)
@@ -226,11 +222,8 @@ class Table(TableBase):
             else:
                 TABLES[self.name][_key] = item
         item = TABLES[self.name][_key].copy()
-        self.pm.hook.put_item_post(table=self.name, item=item)
-        audit_callback(
-            self, 'update' if update else 'create', key, audit_user
-        )
-        return item
+
+        return put_item_post(self, item, update, audit_user)
 
     @memory_ex_handler()
     def put_items(
@@ -245,15 +238,16 @@ class Table(TableBase):
 
     @memory_ex_handler()
     def delete_item(self, **kwargs):
-        key = validate_key_attrs(self.key_attrs, dict(**kwargs), False)
+        key = delete_item_pre(self, dict(kwargs))
+
         _key = get_key(**kwargs)
         if self.items:
             self.items.pop(_key, None)
         else:
             global TABLES
             TABLES.get(self.name, {}).pop(_key, None)
-        self.pm.hook.delete_item_post(table=self.name, key=_key)
-        audit_callback(self, 'delete', key)
+
+        delete_item_post(self, key)
 
     @memory_ex_handler()
     def query(

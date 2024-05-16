@@ -296,6 +296,70 @@ def quote_str(string):
     ) + "'"
 
 
+def get_item_pre(tb, kwargs):
+    key = validate_key_attrs(tb.key_attrs, dict(**kwargs), False)
+    tb.pm.hook.get_item_pre(table=tb.name, key=key)
+    _check_exists = kwargs.pop('abnosql_check_exists', None)
+    return key, _check_exists
+
+
+def get_item_post(tb, kwargs, item, audit_key):
+    _check_exists = kwargs.pop('abnosql_check_exists', None)
+    _item = tb.pm.hook.get_item_post(table=tb.name, item=item)
+    if _item:
+        item = _item
+    item = kms_decrypt_item(tb.config, item)
+    if _check_exists is not False:
+        check_exists(tb, 'get', item)
+    if item is not None:
+        audit_callback(tb, 'get', audit_key)
+    return item
+
+
+def put_item_pre(tb, item, update, audit_user):
+    operation = 'update' if update else 'create'
+    key = validate_key_attrs(tb.key_attrs, item)
+    validate_item(tb.config, operation, item)
+    item = check_exists(tb, operation, item)
+
+    audit_user = audit_user or tb.config.get('audit_user')
+    if audit_user:
+        item = add_audit(item, update or False, audit_user)
+
+    # add change metadata if enabled
+    if hasattr(tb, 'change_meta') and tb.change_meta is True:
+        item = add_change_meta(
+            item, tb.name, 'MODIFY' if update is True else 'INSERT'
+        )
+
+    _item = tb.pm.hook.put_item_pre(table=tb.name, item=item)
+    if _item:
+        item = _item[0]
+    item = kms_encrypt_item(tb.config, item)
+    return item, key
+
+
+def put_item_post(tb, item, update, audit_user, abnosql_audit_callback=True):
+    key = validate_key_attrs(tb.key_attrs, item)
+    tb.pm.hook.put_item_post(table=tb.name, item=item)
+    if abnosql_audit_callback is not False:
+        audit_callback(
+            tb, 'update' if update else 'create', key, audit_user
+        )
+    return item
+
+
+def delete_item_pre(tb, kwargs):
+    key = validate_key_attrs(tb.key_attrs, dict(**kwargs), False)
+    check_exists(tb, 'delete', dict(kwargs))
+    return key
+
+
+def delete_item_post(tb, key):
+    tb.pm.hook.delete_item_post(table=tb.name, key=key)
+    audit_callback(tb, 'delete', key)
+
+
 def validate_query_attrs(key: t.Dict, filters: t.Dict):
     """Validate that the query and filter attributes are named correctly
 
@@ -605,7 +669,11 @@ def check_exists_enabled(config):
 
 
 def check_exists(obj: TableBase, operation: str, item: dict):
-    if len(obj.key_attrs) == 0 or obj.check_exists is False:  # type: ignore
+    if (
+        len(obj.key_attrs) == 0   # type: ignore
+        or not hasattr(obj, 'check_exists')
+        or obj.check_exists is False
+    ):
         return item
     key = {
         k: item.get(k) for k in obj.key_attrs  # type: ignore
