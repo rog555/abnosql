@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from mockfirestore import MockFirestore  # type: ignore
 import pytest
-from tink.integration import gcpkms
+from tink.integration import gcpkms  # type: ignore
 
 from tests import common as cmn
 
