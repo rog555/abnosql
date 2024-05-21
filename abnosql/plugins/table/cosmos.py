@@ -231,12 +231,16 @@ class Table(TableBase):
 
         # do update
         if update is True:
+            update_item = {
+                k: v for k, v in item.items()
+                if k not in self.key_attrs
+            }
             kwargs = {
                 'item': key[self.key_attrs[-1]],
                 'partition_key': key[self.key_attrs[0]],
                 'patch_operations': [
                     {'op': 'add', 'path': f'/{k}', 'value': v}
-                    for k, v in item.items()
+                    for k, v in update_item.items()
                 ]
             }
             item = self._container(self.name).patch_item(**kwargs)

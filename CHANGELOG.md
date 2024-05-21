@@ -1,6 +1,9 @@
 Changelog
 =========
 
+## [v0.0.25] - 2024-05-21
+- Azure Cosmos update fix
+
 ## [v0.0.24] - 2024-05-15
 - Google KMS support and audit_callback
 
