@@ -1,6 +1,7 @@
 from base64 import b64decode
 from base64 import b64encode
 from datetime import datetime
+from decimal import Decimal
 import functools
 import json
 import logging
@@ -197,6 +198,7 @@ class Table(TableBase):
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
         item, _ = put_item_pre(self, item, update, audit_user)
+        item = json.loads(json.dumps(item), parse_float=Decimal)
 
         # do update
         if update is True:
