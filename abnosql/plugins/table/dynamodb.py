@@ -197,6 +197,7 @@ class Table(TableBase):
         audit_user: t.Optional[str] = None
     ) -> t.Dict:
         item, _ = put_item_pre(self, item, update, audit_user)
+        item = json.loads(json.dumps(item), parse_float=Decimal)
 
         # do update
         if update is True:
