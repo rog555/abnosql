@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## [v0.0.26] - 2024-05-24
+
+- Cast floats to decimal.Decimal for dynamodb put
+
 ## [v0.0.25] - 2024-05-21
 - Azure Cosmos update fix
 
