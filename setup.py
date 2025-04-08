@@ -26,34 +26,40 @@ __version__ = get_version()
 base_deps = [
     'jsonschema',
     'pluggy',
-    'pyyaml'
+    'pyyaml',
+    'sqlglot',
 ]
 cli_deps = [
     'click',
-    'tabulate'
+    'tabulate',
 ]
 aws_kms_deps = [
-    'boto3',
     'aws-encryption-sdk',
+    'botocore',
 ]
 aws_dynamodb_deps = [
     'boto3',
-    'dynamodb_json'
+    'botocore',
+    'dynamodb_json',
 ]
 azure_cosmos_deps = [
-    'azure-cosmos'
+    'azure-cosmos',
+    'azure-identity',
 ]
 azure_kms_deps = [
+    'azure-core',  # already used by other azure imports
     'azure-identity',
     'azure-keyvault-keys',
-    'cryptography'  # already used by azure-identity
+    'cryptography',  # already used by azure-identity
 ]
 gcp_firestore_deps = [
+    'google-api-core',  # already used by other google-cloud-firestore
+    'google-auth',  # already used by other google-cloud-firestore
     'google-cloud-firestore',
-    'sqlglot'
+    'sqlglot',
 ]
 gcp_kms_deps = [
-    'tink[gcpkms]'
+    'tink[gcpkms]',
 ]
 all_deps = (
     base_deps
@@ -65,19 +71,29 @@ all_deps = (
     + gcp_firestore_deps
     + gcp_kms_deps
 )
-test_deps = all_deps + [
+mocks = [
+    'boto3',
+    'botocore',
+    'dynamodb_json',
+    'responses',
+]
+test_deps = all_deps + mocks + [
+    'azure-identity',
+    'boto3',
     'coverage',
     'moto==5.0.5',
     'mock-firestore==0.11.0',
     'mypy',
+    'pluggy',
     'pytest',
     'pytest-cov',
     'responses',
-    'sqlglot'
+    'sqlglot',
+    'tink[gcpkms]',
 ]
 dev_deps = test_deps + [
     'pdoc',
-    'pre-commit'
+    'pre-commit',
 ]
 
 setup(
@@ -99,6 +115,7 @@ setup(
     platforms='any',
     packages=find_packages(exclude=['tests']),
 
+    install_requires=base_deps,
     tests_require=test_deps,
     extras_require={
         'dev': dev_deps,

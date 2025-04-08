@@ -6,10 +6,11 @@ import logging
 import os
 from os.path import expanduser
 import sys
-
 import typing as t
 
 import pluggy  # type: ignore
+import sqlglot
+from sqlglot import exp
 
 import abnosql.exceptions as ex
 from abnosql.plugin import PM
@@ -26,8 +27,6 @@ from abnosql.table import put_item_pre
 from abnosql.table import TableBase
 from abnosql.table import validate_query_attrs
 
-import sqlglot
-from sqlglot import exp
 
 hookimpl = pluggy.HookimplMarker('abnosql.table')
 

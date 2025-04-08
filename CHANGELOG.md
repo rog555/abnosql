@@ -1,6 +1,12 @@
 Changelog
 =========
 
+## [v0.0.27] - 2025-04-08
+
+- Dependency corrections and cleanup
+- Include "base_deps" as required installation dependencies
+- Modify call to `AESGCM.generate_key` in azure kms plugin to provide bit length as an argument not a keyword argument
+
 ## [v0.0.26] - 2024-05-24
 
 - Cast floats to decimal.Decimal for dynamodb put

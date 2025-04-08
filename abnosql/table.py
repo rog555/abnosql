@@ -3,14 +3,14 @@ from abc import abstractmethod
 from datetime import datetime
 from datetime import timezone
 import json
-import jsonschema  # type: ignore
 import os
 import re
 import typing as t
 from urllib.parse import urlparse
-from yaml import safe_load  # type: ignore
 
+import jsonschema  # type: ignore
 import pluggy  # type: ignore
+from yaml import safe_load  # type: ignore
 
 import abnosql.exceptions as ex
 from abnosql.kms import kms

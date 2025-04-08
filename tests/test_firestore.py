@@ -3,11 +3,12 @@ from unittest.mock import patch
 
 from mockfirestore import MockFirestore  # type: ignore
 import pytest
-from tests import common as cmn
 
 from abnosql import exceptions as ex
 from abnosql.plugins.table.firestore import Table as FirestoreTable
 from abnosql import table
+from tests import common as cmn
+
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, 'tests', 'data')

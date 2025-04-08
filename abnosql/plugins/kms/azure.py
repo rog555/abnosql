@@ -80,7 +80,7 @@ class Kms(KmsBase):
         # 1) generate random Data Encryption Key (DEK)
         # 256-bit AES-GCM key with 96-bit nonce
         nonce = os.urandom(96)
-        dek = key or AESGCM.generate_key(bit_length=256)
+        dek = key or AESGCM.generate_key(256)
         dek_aesgcm = AESGCM(dek)
 
         # 2) The DEK is encrypted by a Key Encryption Key (KEK)
